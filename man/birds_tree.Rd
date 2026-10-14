@@ -5,7 +5,7 @@
 \alias{birds_tree}
 \title{Phylogeny of the `birds_traits` species}
 \format{
-An object of class `phylo` with 2000 tips.
+An object of class `phylo` with 1000 tips.
 }
 \source{
 Jetz, W. et al. (2012) The global diversity of birds in space and
@@ -18,7 +18,7 @@ birds_tree
 }
 \description{
 Time-calibrated phylogeny (class `phylo`, branch lengths in million
-years) of the 2000 species of [birds_traits], pruned from the tree used
+years) of the 1000 species of [birds_traits], pruned from the tree used
 in Toussaint et al. (2026): global bird phylogeny of Jetz et al. (2012)
 accessed through the megatrees R package (Li 2024; `bird_20221117`),
 made ultrametric with `phytools::force.ultrametric(method = "extend")`,

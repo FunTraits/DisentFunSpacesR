@@ -51,7 +51,7 @@ app_ui <- function() {
       bslib::layout_sidebar(
         sidebar = bslib::sidebar(width = 320,
           shiny::radioButtons("src", "Data source",
-            c("Example (2000 bird species, real data)" = "example", "Upload a file" = "upload")),
+            c("Example (1000 bird species, real data)" = "example", "Upload a file" = "upload")),
           shiny::conditionalPanel("input.src == 'upload'",
             shiny::fileInput("file", "Trait table (.csv, .tsv, .txt, .xlsx)",
                              accept = c(".csv", ".tsv", ".txt", ".xlsx", ".xls")),

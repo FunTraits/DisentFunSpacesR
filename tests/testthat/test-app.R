@@ -2,12 +2,12 @@ test_that("app server runs the full workflow on the example data", {
   skip_if_not_installed("shiny")
   shiny::testServer(DisentFunSpaces:::app_server, {
     session$setInputs(src = "example", species_col = "species", iucn_col = "iucn", sep = ",")
-    expect_equal(nrow(raw()), 2000)
+    expect_equal(nrow(raw()), 1000)
     expect_equal(nrow(rv$ti), 26)
     session$setInputs(validate = 1)
     expect_s3_class(rv$traits, "fs_traits")
     session$setInputs(missing = "drop", run_missing = 1)
-    expect_lt(length(rv$traits_final$species), 2000)
+    expect_lt(length(rv$traits_final$species), 1000)
     session$setInputs(spaces_sel = c("Diet", "Locomotion", "Combined"), weighting = "variable",
                       correction = "none", run_spaces = 1)
     expect_named(rv$spaces, c("Diet", "Locomotion", "Combined"))
@@ -27,7 +27,7 @@ test_that("app server runs the full workflow on the example data", {
 
 test_that("app handles an uploaded semicolon CSV with guessed trait types", {
   f <- tempfile(fileext = ".csv")
-  d <- birds_traits[seq(1, 2000, by = 8), setdiff(names(birds_traits), c("order", "family"))]
+  d <- birds_traits[seq(1, 1000, by = 4), setdiff(names(birds_traits), c("order", "family"))]
   utils::write.table(d, f, sep = ";", row.names = FALSE)
   shiny::testServer(DisentFunSpaces:::app_server, {
     session$setInputs(src = "upload", sep = ";", file = list(datapath = f, name = "my_traits.csv"))

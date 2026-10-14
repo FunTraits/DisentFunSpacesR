@@ -1,4 +1,4 @@
-# Example data (real birds): complete cases (68 species) or, with missing
+# Example data (real birds): complete cases (59 species) or, with missing
 # values, 333 species with clutch size, egg mass and adult body mass known, so
 # that every pair of species shares reproduction traits (keeps tests fast).
 ex <- function(complete = TRUE) {

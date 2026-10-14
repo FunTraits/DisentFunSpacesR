@@ -23,7 +23,8 @@ Workflow (Toussaint et al. 2026, Ecography, doi:10.1002/ecog.08578):
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/FunTraits/DisentFunSpaces}
+  \item \url{https://github.com/FunTraits/DisentFunSpacesR}
+  \item Report bugs at \url{https://github.com/FunTraits/DisentFunSpacesR/issues}
 }
 
 }

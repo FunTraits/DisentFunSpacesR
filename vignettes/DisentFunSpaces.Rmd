@@ -12,9 +12,9 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6, fig.height
 ```
 
 This vignette applies the framework of Toussaint et al. (2026, *Ecography*,
-doi:10.1002/ecog.08578) to the example data of the package: 2000 bird species
-drawn at random from the species of that study and described by the same
-traits — locomotion (five continuous traits, AVONET; Tobias et al. 2022),
+doi:10.1002/ecog.08578) to the example data of the package: 1000 bird species
+drawn at random from the species of that study having at least two traits
+informed in each dimension, and described by the same traits — locomotion (five continuous traits, AVONET; Tobias et al. 2022),
 reproduction (eight continuous traits, Amniote database; Myhrvold et al.
 2015) and diet (ten diet categories coded as one fuzzy trait, EltonTraits;
 Wilman et al. 2014). See `?birds_traits` for sources, licences and sampling.
@@ -67,8 +67,9 @@ traits <- prepare_traits(birds_traits, birds_trait_info, species_col = "species"
 traits
 ```
 
-Reproduction traits have many missing values (9 % for adult body mass, up to
-85 % for body length); only `r sum(stats::complete.cases(traits$data))`
+Reproduction traits have many missing values (1 % for adult body mass, up to
+76 % for longevity and body length; every species has at least two
+reproduction traits); only `r sum(stats::complete.cases(traits$data))`
 species are complete. As in the published analysis, missing values are
 imputed with missForest using the first ten phylogenetic eigenvectors as
 predictors (eigenvectors can also be computed from `birds_tree` with

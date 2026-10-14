@@ -5,15 +5,16 @@
   documented); e.g. `body_mass` and `body_length` are no longer grouped.
 
 * The simulated example data (`toy_traits`, `toy_trait_info`, `toy_tree`)
-  are replaced by real data: `birds_traits`, 2000 bird species drawn at
-  random from the species of Toussaint et al. (2026, Ecography) and
+  are replaced by real data: `birds_traits`, 1000 bird species drawn at
+  random from the species of Toussaint et al. (2026, Ecography) with at
+  least two traits informed in each dimension, and
   described by the traits of that paper (locomotion: 5 continuous traits,
   AVONET; reproduction: 8 continuous traits, Amniote database; diet: 1
   fuzzy-coded trait with 10 categories, EltonTraits; beak: 3 traits of the
   validation space, `use = FALSE`), with real missing values, IUCN
   categories and 10 phylogenetic eigenvectors; `birds_trait_info` and
   `birds_tree` (script `data-raw/birds_traits.R`).
-* Examples, vignette, README, Shiny application ("Example (2000 bird
+* Examples, vignette, README, Shiny application ("Example (1000 bird
   species, real data)") and the worked example of `inst/paper/paper_analyses.R`
   use the bird data. Simulated data remain available with `simulate_traits()`
   and are used by the tests that need circular and multichoice traits.

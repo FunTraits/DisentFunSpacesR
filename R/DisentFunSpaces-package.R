@@ -15,9 +15,9 @@
 #' @keywords internal
 "_PACKAGE"
 
-#' Example dataset: traits of 2000 bird species
+#' Example dataset: traits of 1000 bird species
 #'
-#' Observed (non-imputed, untransformed) traits of 2000 bird species drawn at
+#' Observed (non-imputed, untransformed) traits of 1000 bird species drawn at
 #' random from the species analysed by Toussaint et al. (2026, *Ecography*,
 #' \doi{10.1002/ecog.08578}), described by the traits used in that paper:
 #' locomotion (five continuous traits, AVONET), reproduction (eight
@@ -29,19 +29,22 @@
 #' imputation predictors in the paper. Script: `data-raw/birds_traits.R`
 #' (source repository).
 #'
-#' **Sampling.** Simple random sample (fixed seed) of 2000 of the 7,619
-#' species of the published analysis present in the phylogeny (BirdLife
-#' taxonomy; 33 orders and 187 families represented).
+#' **Sampling.** Simple random sample (fixed seed) of 1000 of the 5,137
+#' species of the published analysis that are present in the phylogeny and
+#' have at least two traits informed in each dimension (locomotion,
+#' reproduction, diet); BirdLife taxonomy, 29 orders and 160 families
+#' represented. The selection favours species with better-known
+#' reproduction traits.
 #'
 #' **Missing values** are real and concern reproduction traits only:
-#' `adult_body_mass` (9 %), `clutch_size` (34 %), `egg_mass` (54 %),
-#' `incubation_days` (78 %), `fledging_days` (82 %), `clutches_per_year`
-#' (84 %), `longevity_years` (84 %) and `body_length` (85 %). 7 % of species
-#' have no reproduction trait and only 3 % (68 species) have no missing
+#' `adult_body_mass` (1 %), `clutch_size` (4 %), `egg_mass` (30 %),
+#' `incubation_days` (67 %), `fledging_days` (72 %), `clutches_per_year`
+#' (74 %), `body_length` (76 %) and `longevity_years` (76 %); every species
+#' has at least two reproduction traits and 6 % (59 species) have no missing
 #' value. As in the published analysis, missing values should be imputed
 #' (see [impute_traits()] and the vignette).
 #'
-#' @format A data frame with 2000 rows and 40 columns:
+#' @format A data frame with 1000 rows and 40 columns:
 #' \describe{
 #'   \item{species}{Binomial name, BirdLife taxonomy (`Genus_species`).}
 #'   \item{order, family}{BirdLife taxonomy from AVONET (not traits).}
@@ -99,7 +102,7 @@
 #' Phylogeny of the `birds_traits` species
 #'
 #' Time-calibrated phylogeny (class `phylo`, branch lengths in million
-#' years) of the 2000 species of [birds_traits], pruned from the tree used
+#' years) of the 1000 species of [birds_traits], pruned from the tree used
 #' in Toussaint et al. (2026): global bird phylogeny of Jetz et al. (2012)
 #' accessed through the megatrees R package (Li 2024; `bird_20221117`),
 #' made ultrametric with `phytools::force.ultrametric(method = "extend")`,
@@ -107,7 +110,7 @@
 #' species still absent added at the root of their genus
 #' (`phytools::add.species.to.genus()`).
 #'
-#' @format An object of class `phylo` with 2000 tips.
+#' @format An object of class `phylo` with 1000 tips.
 #' @source Jetz, W. et al. (2012) The global diversity of birds in space and
 #'   time. *Nature* 491: 444-448, \doi{10.1038/nature11631}. Li, D. (2024)
 #'   megatrees: mega-trees of plants and animals (R package),

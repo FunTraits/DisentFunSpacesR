@@ -1,6 +1,6 @@
 ## Build the example datasets `birds_traits`, `birds_trait_info`, `birds_tree`
 ## ---------------------------------------------------------------------------
-## Real data: 2000 bird species drawn at random from the species analysed in
+## Real data: 1000 bird species drawn at random from the species analysed in
 ## Toussaint et al. (2026, Ecography, doi:10.1002/ecog.08578), described by
 ## the traits used in that paper, with their OBSERVED (non-imputed,
 ## untransformed) values:
@@ -16,11 +16,12 @@
 ## Also: IUCN Red List category (API v4, rredlist), the first 10 phylogenetic
 ## eigenvectors (PCoA of the square-rooted cophenetic distances of the full
 ## tree, as used for imputation in the paper) and the phylogeny pruned to
-## the 2000 species.
+## the 1000 species.
 ##
-## Species pool: the 8,413 species of the analysis present in the phylogeny
-## and in the eigenvector table (7,619 species). 2000 species are drawn by
-## simple random sampling (fixed seed).
+## Species pool: species of the analysis present in the phylogeny and in the
+## eigenvector table, with at least two traits informed in each dimension
+## (locomotion, reproduction, diet). 1000 species are drawn by simple random
+## sampling (fixed seed).
 ##
 ## Run from the package root:  source("data-raw/birds_traits.R")
 ## ---------------------------------------------------------------------------
@@ -28,7 +29,7 @@
 FUSE <- path.expand(Sys.getenv(
   "FUSE_BIRD_DIR",
   "~/Library/CloudStorage/OneDrive-Personnel/iCloud Drive/00_Papier_2_Submitted/FUSE_bird"))
-N_SPECIES <- 2000
+N_SPECIES <- 1000
 SEED <- 2026
 
 ready <- utils::read.csv(file.path(FUSE, "data/processed/phenoBirdsImputedREADY.csv"),
@@ -44,7 +45,15 @@ avonet <- as.data.frame(readxl::read_excel(file.path(FUSE, "data/raw/AVONET.xlsx
 ## ---- species pool and random draw ------------------------------------------------
 d <- raw[match(ready$scientificNameStd, raw$species), ]
 stopifnot(identical(d$species, ready$scientificNameStd))
-pool <- d$species %in% tree$tip.label & d$species %in% eig$scientificNameStd
+## at least two traits informed in each dimension (locomotion: 5 AVONET traits,
+## reproduction: 8 Amniote traits; diet: the 10 EltonTraits categories)
+n_obs <- function(cols) rowSums(!is.na(d[, cols]))
+loco_cols  <- c("Tarsus.Length", "Wing.Length", "Kipps.Distance", "Tail.Length", "Mass")
+repro_cols <- c("litter_or_clutch_size_n", "litters_or_clutches_per_y", "adult_body_mass_g",
+                "incubation_d", "longevity_y", "fledging_age_d", "egg_mass_g", "adult_svl_cm")
+diet_cols  <- grep("^Diet\\.", names(d), value = TRUE)
+pool <- d$species %in% tree$tip.label & d$species %in% eig$scientificNameStd &
+  n_obs(loco_cols) >= 2 & n_obs(repro_cols) >= 2 & n_obs(diet_cols) >= 2
 d <- d[pool, ]; ready <- ready[pool, ]
 message(nrow(d), " species in the pool")
 set.seed(SEED)
