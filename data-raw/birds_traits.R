@@ -1,6 +1,6 @@
 ## Build the example datasets `birds_traits`, `birds_trait_info`, `birds_tree`
 ## ---------------------------------------------------------------------------
-## Real data: 1000 bird species drawn at random from the species analysed in
+## Real data: 1000 bird species selected among the species analysed in
 ## Toussaint et al. (2026, Ecography, doi:10.1002/ecog.08578), described by
 ## the traits used in that paper, with their OBSERVED (non-imputed,
 ## untransformed) values:
@@ -18,10 +18,10 @@
 ## tree, as used for imputation in the paper) and the phylogeny pruned to
 ## the 1000 species.
 ##
-## Species pool: species of the analysis present in the phylogeny and in the
-## eigenvector table, with at least two traits informed in each dimension
-## (locomotion, reproduction, diet). 1000 species are drawn by simple random
-## sampling (fixed seed).
+## Species selection: species of the analysis present in the phylogeny and in
+## the eigenvector table; all species with no missing value (281) plus the
+## species with the fewest missing values, up to 1000 (ties at random, fixed
+## seed). The sample is therefore biased towards well-studied species.
 ##
 ## Run from the package root:  source("data-raw/birds_traits.R")
 ## ---------------------------------------------------------------------------
@@ -45,19 +45,23 @@ avonet <- as.data.frame(readxl::read_excel(file.path(FUSE, "data/raw/AVONET.xlsx
 ## ---- species pool and random draw ------------------------------------------------
 d <- raw[match(ready$scientificNameStd, raw$species), ]
 stopifnot(identical(d$species, ready$scientificNameStd))
-## at least two traits informed in each dimension (locomotion: 5 AVONET traits,
-## reproduction: 8 Amniote traits; diet: the 10 EltonTraits categories)
-n_obs <- function(cols) rowSums(!is.na(d[, cols]))
+## Selection: all species with no missing value for the 13 continuous traits
+## and the diet (281 species), completed to 1000 with the species having the
+## fewest missing values (ties at the cut-off broken at random, fixed seed).
 loco_cols  <- c("Tarsus.Length", "Wing.Length", "Kipps.Distance", "Tail.Length", "Mass")
 repro_cols <- c("litter_or_clutch_size_n", "litters_or_clutches_per_y", "adult_body_mass_g",
                 "incubation_d", "longevity_y", "fledging_age_d", "egg_mass_g", "adult_svl_cm")
 diet_cols  <- grep("^Diet\\.", names(d), value = TRUE)
 pool <- d$species %in% tree$tip.label & d$species %in% eig$scientificNameStd &
-  n_obs(loco_cols) >= 2 & n_obs(repro_cols) >= 2 & n_obs(diet_cols) >= 2
+  stats::complete.cases(d[, diet_cols])
 d <- d[pool, ]; ready <- ready[pool, ]
-message(nrow(d), " species in the pool")
+n_na <- rowSums(is.na(d[, c(loco_cols, repro_cols)]))
+message(nrow(d), " species in the pool; ", sum(n_na == 0), " with no missing value")
 set.seed(SEED)
-pick <- sort(sample(d$species, N_SPECIES))
+ord <- order(n_na, stats::runif(length(n_na)))      # fewest NA first, random ties
+pick <- sort(d$species[ord[seq_len(N_SPECIES)]])
+message("maximum number of missing traits among selected species: ",
+        max(n_na[match(pick, d$species)]))
 i <- match(pick, d$species)
 d <- d[i, ]; ready <- ready[i, ]
 av <- avonet[match(gsub("_", " ", pick), avonet$Species1), ]   # BirdLife order and family

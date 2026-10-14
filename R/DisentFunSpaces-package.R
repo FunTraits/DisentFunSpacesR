@@ -17,8 +17,8 @@
 
 #' Example dataset: traits of 1000 bird species
 #'
-#' Observed (non-imputed, untransformed) traits of 1000 bird species drawn at
-#' random from the species analysed by Toussaint et al. (2026, *Ecography*,
+#' Observed (non-imputed, untransformed) traits of 1000 bird species selected
+#' among the species analysed by Toussaint et al. (2026, *Ecography*,
 #' \doi{10.1002/ecog.08578}), described by the traits used in that paper:
 #' locomotion (five continuous traits, AVONET), reproduction (eight
 #' continuous traits, Amniote database) and diet (one fuzzy-coded trait with
@@ -29,20 +29,20 @@
 #' imputation predictors in the paper. Script: `data-raw/birds_traits.R`
 #' (source repository).
 #'
-#' **Sampling.** Simple random sample (fixed seed) of 1000 of the 5,137
-#' species of the published analysis that are present in the phylogeny and
-#' have at least two traits informed in each dimension (locomotion,
-#' reproduction, diet); BirdLife taxonomy, 29 orders and 160 families
-#' represented. The selection favours species with better-known
-#' reproduction traits.
+#' **Selection.** All 281 species of the published analysis present in the
+#' phylogeny that have no missing value for the 23 traits, completed to 1000
+#' with the species having the fewest missing values (one or two; ties at
+#' random, fixed seed). BirdLife taxonomy; 28 orders and 112 families. The
+#' sample is biased towards well-studied species (e.g. 297 Passeriformes, i.e.
+#' 30 %, against about 60 % of all birds) and is meant to illustrate the
+#' workflow, not to estimate global patterns.
 #'
-#' **Missing values** are real and concern reproduction traits only:
-#' `adult_body_mass` (1 %), `clutch_size` (4 %), `egg_mass` (30 %),
-#' `incubation_days` (67 %), `fledging_days` (72 %), `clutches_per_year`
-#' (74 %), `body_length` (76 %) and `longevity_years` (76 %); every species
-#' has at least two reproduction traits and 6 % (59 species) have no missing
-#' value. As in the published analysis, missing values should be imputed
-#' (see [impute_traits()] and the vignette).
+#' **Missing values** (3 % of trait values) concern reproduction traits
+#' only: `body_length` (53 %), `longevity_years` (12 %), `clutches_per_year`
+#' (7 %), `fledging_days` (7 %), `egg_mass` (0.4 %) and `incubation_days`
+#' (0.1 %). 281 species have no missing value, 650 one and 69 two; they can
+#' be kept (pairwise Gower distance), removed or imputed as in the published
+#' analysis (see [impute_traits()] and the vignette).
 #'
 #' @format A data frame with 1000 rows and 40 columns:
 #' \describe{

@@ -5,9 +5,9 @@
   documented); e.g. `body_mass` and `body_length` are no longer grouped.
 
 * The simulated example data (`toy_traits`, `toy_trait_info`, `toy_tree`)
-  are replaced by real data: `birds_traits`, 1000 bird species drawn at
-  random from the species of Toussaint et al. (2026, Ecography) with at
-  least two traits informed in each dimension, and
+  are replaced by real data: `birds_traits`, 1000 bird species of
+  Toussaint et al. (2026, Ecography) with the fewest missing values (all
+  281 complete species plus species missing one or two traits),
   described by the traits of that paper (locomotion: 5 continuous traits,
   AVONET; reproduction: 8 continuous traits, Amniote database; diet: 1
   fuzzy-coded trait with 10 categories, EltonTraits; beak: 3 traits of the
