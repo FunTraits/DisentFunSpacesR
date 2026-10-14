@@ -1,0 +1,243 @@
+---
+title: "Building and comparing functional spaces"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Building and comparing functional spaces}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6, fig.height = 4.5)
+```
+
+This vignette applies the framework of Toussaint et al. (2026, *Ecography*,
+doi:10.1002/ecog.08578) to the example data of the package: 2000 bird species
+drawn at random from the species of that study and described by the same
+traits — locomotion (five continuous traits, AVONET; Tobias et al. 2022),
+reproduction (eight continuous traits, Amniote database; Myhrvold et al.
+2015) and diet (ten diet categories coded as one fuzzy trait, EltonTraits;
+Wilman et al. 2014). See `?birds_traits` for sources, licences and sampling.
+The framework (i) groups traits into functional dimensions, (ii) builds one
+functional space per dimension and one combined space, and (iii) quantifies
+how congruent these spaces are, at the level of the whole space (Procrustes
+tests) and of species (FUn, FSp, FUSE).
+
+```{r}
+library(DisentFunSpaces)
+data(birds_traits)
+dim(birds_traits)
+head(birds_traits[, c("species", "family", "body_mass", "clutch_size", "diet_inv", "iucn")])
+```
+
+## 1. Describe the traits
+
+Each trait column receives a **type** and a functional **dimension**. Columns of a
+fuzzy-coded (`F`) or multichoice (`B`) trait share a **block** name.
+
+```{r}
+trait_types()[, c("code", "label")]
+```
+
+`guess_trait_info()` proposes a first draft, which must be checked: dimensions,
+ordinal levels and circular limits cannot be inferred. Taxonomy and the IUCN
+category are not traits and are left out; the phylogenetic eigenvectors
+(`Eigen.1`-`Eigen.10`) are recognised as imputation predictors (`use = FALSE`).
+
+```{r}
+not_traits <- c("order", "family", "iucn")
+draft <- guess_trait_info(birds_traits[, !names(birds_traits) %in% not_traits],
+                          species_col = "species")
+draft[draft$trait %in% c("body_mass", "clutch_size", "diet_inv", "diet_fruit", "Eigen.1"), 1:5]
+```
+
+The completed table assigns traits to the three dimensions of the published
+analysis. The beak traits, used in the paper only to build a validation
+space, are listed with `use = FALSE`:
+
+```{r}
+data(birds_trait_info)
+birds_trait_info[, c("trait", "type", "dimension", "block", "transform", "use")]
+```
+
+## 2. Prepare traits and impute missing values
+
+```{r}
+traits <- prepare_traits(birds_traits, birds_trait_info, species_col = "species")
+traits
+```
+
+Reproduction traits have many missing values (9 % for adult body mass, up to
+85 % for body length); only `r sum(stats::complete.cases(traits$data))`
+species are complete. As in the published analysis, missing values are
+imputed with missForest using the first ten phylogenetic eigenvectors as
+predictors (eigenvectors can also be computed from `birds_tree` with
+`phylo = birds_tree`). Missing values could also be kept (the generalised
+Gower distance then uses, for each pair of species, the traits available for
+both) or removed with `drop_incomplete()`.
+
+```{r}
+preds <- birds_traits[, paste0("Eigen.", 1:10)]
+rownames(preds) <- birds_traits$species
+if (requireNamespace("missForest", quietly = TRUE)) {
+  traits <- impute_traits(traits, covariates = preds, ntree = 50, seed = 1)
+  print(traits$imputation$oob)
+} else {
+  traits <- drop_incomplete(traits)   # fallback when missForest is not installed
+}
+length(traits$species)
+```
+
+## 3. Build the functional spaces
+
+`build_space()` assembles the traits of the selected dimensions into one
+table per dimension × type (fuzzy and multichoice traits prepared with
+`ade4::prep.fuzzy()` / `ade4::prep.binary()`) and calls `PCoAGraph()`, the
+core function of the published analysis: `ade4::ktab.list.df()` →
+`ade4::dist.ktab(option = "scaledBYrange")` → `ape::pcoa()` →
+`vegan::envfit()` and `CorrelType()`. By default one space per dimension plus
+a `Combined` space. `engine = "fast"` gives the same distances as
+`ade4::dist.ktab()` (vectorised; see `?trait_distance`) and is faster for
+thousands of species:
+
+```{r}
+spaces <- build_spaces(traits, envfit_perm = 0, engine = "fast")
+spaces
+spaces$Combined$blocks$groups   # types of the tables passed to dist.ktab
+```
+
+As in the published analysis, the first axis of the combined space is a size
+gradient (body mass, wing length, egg mass), whereas diet only structures the
+second axis:
+
+```{r}
+round(spaces$Combined$PCoACor[, 1:2], 2)
+```
+
+```{r}
+plot_space(spaces$Combined)
+plot_space(spaces$Diet)
+plot_quality(lapply(spaces, space_quality, max_axes = 8))
+```
+
+## 4. Compare spaces with Procrustes tests
+
+```{r}
+cmp <- compare_spaces(spaces, nrepet = 199)
+cmp
+plot_comparison(cmp)
+```
+
+Locomotion and reproduction spaces are strongly congruent (both largely
+driven by body size), whereas the diet space is only weakly congruent with
+them.
+
+`weighting = "variable"` (default) reproduces the published analysis: a
+single `ade4::dist.ktab()` call in which each continuous trait and the
+fuzzy-coded diet block count as one variable each, so that the combined
+squared distance is (5 d²~Locomotion~ + 8 d²~Reproduction~ + 1 d²~Diet~) / 14.
+Two dimension-level weightings are available. With `"dimension"` each
+dimension has the same weight; because Manly distances between diet profiles
+are on average much larger than range-scaled distances between continuous
+traits, diet then dominates the combined space. `"dimension_scaled"` divides
+the squared distances of each dimension by their mean before averaging, so
+that each dimension contributes equally on average:
+
+```{r}
+dims <- c("Locomotion", "Reproduction", "Diet")
+for (w in c("dimension", "dimension_scaled")) {
+  spaces[[w]] <- build_space(traits, dims, name = w, weighting = w,
+                             envfit_perm = 0, engine = "fast")
+}
+r_comb <- function(nm) {
+  tb <- compare_spaces(spaces[c(dims, nm)], nrepet = 99)$table
+  setNames(tb$r[tb$space2 == nm], tb$space1[tb$space2 == nm])
+}
+round(rbind(variable = r_comb("Combined"), dimension = r_comb("dimension"),
+            dimension_scaled = r_comb("dimension_scaled")), 2)
+spaces$dimension <- spaces$dimension_scaled <- NULL
+```
+
+The robustness of the conclusions to the number of axes can be explored with
+`n_axes` (e.g. `compare_spaces(spaces, n_axes = 2)`, as the first two axes
+were retained in the published analysis).
+
+Species whose functional position differs most between two spaces:
+
+```{r}
+res <- procrustes_residuals(spaces$Diet, spaces$Combined)
+head(res)
+plot_procrustes(res)
+```
+
+### Validation space: beak morphology
+
+The published analysis excluded beak traits from the locomotion space and
+used them to build an independent validation space. Setting `use = TRUE`
+for these traits adds a `Beak` dimension:
+
+```{r}
+ti_beak <- birds_trait_info
+ti_beak$use <- TRUE
+tr_beak <- prepare_traits(birds_traits, ti_beak, species_col = "species")
+beak <- build_space(tr_beak, "Beak", envfit_perm = 0, engine = "fast")
+sp_beak <- structure(list(Locomotion = spaces$Locomotion, Diet = spaces$Diet, Beak = beak),
+                     class = "fs_spaces")
+compare_spaces(sp_beak, nrepet = 99)
+```
+
+## 5. Species-level metrics
+
+FUSE combines FUn and FSp with the extinction probability associated with
+the IUCN category of each species (Gumbs et al. 2023):
+
+```{r}
+iucn <- setNames(birds_traits$iucn, birds_traits$species)
+m <- species_metrics_all(spaces, k = 5, iucn = iucn)
+head(m)
+```
+
+The species with the highest FUSE, and the sets of the most unique species,
+differ between functional dimensions:
+
+```{r}
+top <- lapply(split(m, m$space), function(x) head(x$species[order(-x$FUSE)], 5))
+as.data.frame(top, check.names = FALSE)
+compare_metrics(m, "FUn", top = 0.1)$pairs
+```
+
+## 6. Non-native species
+
+The bird data have no native/non-native status, so introductions are
+simulated here (15% of species, biased towards the periphery of the combined
+space). With real data, `status` is a named vector (`"native"` vs any other
+label, e.g. `"introduced"`), or a sites x species matrix with `comm` when a
+species is native in some assemblages and non-native in others.
+
+```{r}
+status <- simulate_introductions(spaces$Combined, prop = 0.15,
+                                 bias = "peripheral", seed = 1)
+nn <- nonnative_all(spaces, status, n_axes = 4, hull_axes = 3,
+                    null = "permute", nrep = 19, seed = 1)   # use >= 999 in practice
+summary_nonnative(nn)
+```
+
+`p_outside_hull` is the proportion of non-native species that expand the
+native space, `FNov_rel` their mean distance to the nearest native relative
+to the mean nearest-neighbour distance among natives (> 1: non-native species
+are further from natives than natives are from each other), `dFUn_native_median` the
+median loss of uniqueness of native species, and `ses_FRic_median` the
+standardised effect of introductions on functional richness compared with
+the same number of random species. Non-native species that are novel in one
+dimension are not necessarily novel in another:
+
+```{r}
+compare_nonnative(nn, "FNov", top = 0.2)$pairs
+plot_nonnative(spaces$Combined, status, label = 5)
+```
+
+## Shiny application
+
+The same workflow is available interactively with `run_app()`, which also
+exports the trait-information table, the results and an R script reproducing
+the analysis.

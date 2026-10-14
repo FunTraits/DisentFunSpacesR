@@ -1,0 +1,11 @@
+.Rproj.user
+.Rhistory
+.RData
+.DS_Store
+*.Rcheck/
+*.tar.gz
+inst/doc
+doc
+Meta
+paper_outputs/
+supp_outputs/
