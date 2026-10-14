@@ -32,12 +32,12 @@ test_that("check_trait_info catches inconsistent tables", {
 test_that("prepare_traits converts types correctly", {
   tr <- prepare_traits(birds_traits, birds_trait_info, species_col = "species")
   expect_s3_class(tr, "fs_traits")
-  expect_equal(nrow(tr$data), 1000)
+  expect_equal(nrow(tr$data), 2000)
   d <- tr$data
   expect_false(any(grepl("^beak_", names(d))))
   expect_setequal(unique(tr$trait_info$dimension), c("Locomotion", "Reproduction", "Diet"))
   fz <- d[, grep("^diet_", names(d))]
-  expect_equal(unname(rowSums(fz)), rep(1, 1000), tolerance = 1e-12)
+  expect_equal(unname(rowSums(fz)), rep(1, 2000), tolerance = 1e-12)
   expect_equal(d$body_mass, log10(birds_traits$body_mass))
   expect_equal(mean(is.na(d$longevity_years)), mean(is.na(birds_traits$longevity_years)))
   expect_error(prepare_traits(rbind(birds_traits, birds_traits[1, ]), birds_trait_info, "species"),

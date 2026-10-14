@@ -1,6 +1,6 @@
 ## Build the example datasets `birds_traits`, `birds_trait_info`, `birds_tree`
 ## ---------------------------------------------------------------------------
-## Real data: 1000 bird species selected among the species analysed in
+## Real data: 2000 bird species selected among the species analysed in
 ## Toussaint et al. (2026, Ecography, doi:10.1002/ecog.08578), described by
 ## the traits used in that paper, with their OBSERVED (non-imputed,
 ## untransformed) values:
@@ -16,12 +16,12 @@
 ## Also: IUCN Red List category (API v4, rredlist), the first 10 phylogenetic
 ## eigenvectors (PCoA of the square-rooted cophenetic distances of the full
 ## tree, as used for imputation in the paper) and the phylogeny pruned to
-## the 1000 species.
+## the 2000 species.
 ##
 ## Species selection: species of the analysis present in the phylogeny and in
-## the eigenvector table; all species with no missing value (281) plus the
-## species with the fewest missing values, up to 1000 (ties at random, fixed
-## seed). The sample is therefore biased towards well-studied species.
+## the eigenvector table: all species with no missing value (281) plus a
+## random sample of the species with at least one trait informed in each
+## dimension, for a total of 2000 species (fixed seed).
 ##
 ## Run from the package root:  source("data-raw/birds_traits.R")
 ## ---------------------------------------------------------------------------
@@ -29,7 +29,7 @@
 FUSE <- path.expand(Sys.getenv(
   "FUSE_BIRD_DIR",
   "~/Library/CloudStorage/OneDrive-Personnel/iCloud Drive/00_Papier_2_Submitted/FUSE_bird"))
-N_SPECIES <- 1000
+N_SPECIES <- 2000
 SEED <- 2026
 
 ready <- utils::read.csv(file.path(FUSE, "data/processed/phenoBirdsImputedREADY.csv"),
@@ -47,22 +47,22 @@ d <- raw[match(ready$scientificNameStd, raw$species), ]
 stopifnot(identical(d$species, ready$scientificNameStd))
 d_all <- d; ready_all <- ready                       # all 8,413 species (birds_traits_all)
 ## Selection: all species with no missing value for the 13 continuous traits
-## and the diet (281 species), completed to 1000 with the species having the
-## fewest missing values (ties at the cut-off broken at random, fixed seed).
+## and the diet (281 species), plus a random sample (fixed seed) of the
+## species with at least one trait informed in each dimension (locomotion,
+## reproduction, diet), for a total of 2000 species.
 loco_cols  <- c("Tarsus.Length", "Wing.Length", "Kipps.Distance", "Tail.Length", "Mass")
 repro_cols <- c("litter_or_clutch_size_n", "litters_or_clutches_per_y", "adult_body_mass_g",
                 "incubation_d", "longevity_y", "fledging_age_d", "egg_mass_g", "adult_svl_cm")
 diet_cols  <- grep("^Diet\\.", names(d), value = TRUE)
+n_obs <- function(cols) rowSums(!is.na(d[, cols]))
 pool <- d$species %in% tree$tip.label & d$species %in% eig$scientificNameStd &
-  stats::complete.cases(d[, diet_cols])
+  n_obs(loco_cols) >= 1 & n_obs(repro_cols) >= 1 & n_obs(diet_cols) >= 1
 d <- d[pool, ]; ready <- ready[pool, ]
-n_na <- rowSums(is.na(d[, c(loco_cols, repro_cols)]))
-message(nrow(d), " species in the pool; ", sum(n_na == 0), " with no missing value")
+complete <- stats::complete.cases(d[, c(loco_cols, repro_cols, diet_cols)])
+message(nrow(d), " species in the pool; ", sum(complete), " with no missing value")
 set.seed(SEED)
-ord <- order(n_na, stats::runif(length(n_na)))      # fewest NA first, random ties
-pick <- sort(d$species[ord[seq_len(N_SPECIES)]])
-message("maximum number of missing traits among selected species: ",
-        max(n_na[match(pick, d$species)]))
+others <- d$species[!complete]
+pick <- sort(c(d$species[complete], sample(others, N_SPECIES - sum(complete))))
 i <- match(pick, d$species)
 d <- d[i, ]; ready <- ready[i, ]
 av <- avonet[match(gsub("_", " ", pick), avonet$Species1), ]   # BirdLife order and family

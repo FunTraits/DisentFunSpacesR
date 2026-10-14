@@ -51,7 +51,14 @@ app_ui <- function() {
       bslib::layout_sidebar(
         sidebar = bslib::sidebar(width = 320,
           shiny::radioButtons("src", "Data source",
-            c("Example (1000 bird species, real data)" = "example", "Upload a file" = "upload")),
+            c("Example: 2000 bird species (fast)" = "example",
+              "Example: all 8,413 bird species of Toussaint et al. 2026" = "example_all",
+              "Upload a file" = "upload")),
+          shiny::conditionalPanel("input.src == 'example_all'",
+            shiny::tags$p(class = "step-help",
+              "Full dataset of the Ecography paper (22 % missing values, impute them in tab 3).",
+              " Building the spaces of 8,413 species takes several minutes and about 4 GB of RAM;",
+              " the Procrustes and non-native analyses also take longer.")),
           shiny::conditionalPanel("input.src == 'upload'",
             shiny::fileInput("file", "Trait table (.csv, .tsv, .txt, .xlsx)",
                              accept = c(".csv", ".tsv", ".txt", ".xlsx", ".xls")),
@@ -312,9 +319,10 @@ app_server <- function(input, output, session) {
 
   # ---- 1. data --------------------------------------------------------------
   raw <- shiny::reactive({
-    if (input$src == "example") {
-      e <- new.env(); utils::data("birds_traits", package = "DisentFunSpaces", envir = e)
-      return(e$birds_traits)
+    if (input$src %in% c("example", "example_all")) {
+      nm <- if (input$src == "example") "birds_traits" else "birds_traits_all"
+      e <- new.env(); utils::data(list = nm, package = "DisentFunSpaces", envir = e)
+      return(e[[nm]])
     }
     shiny::req(input$file)
     path <- input$file$datapath
@@ -329,7 +337,8 @@ app_server <- function(input, output, session) {
       }
     }, error = function(e) { notify_error(e); NULL })
   })
-  data_name <- shiny::reactive(if (input$src == "example") "birds_traits.csv" else input$file$name)
+  data_name <- shiny::reactive(switch(input$src, example = "birds_traits.csv",
+                                     example_all = "birds_traits_all.csv", input$file$name))
 
   shiny::observeEvent(raw(), {
     d <- raw(); shiny::req(d)
@@ -373,7 +382,7 @@ app_server <- function(input, output, session) {
   shiny::observeEvent(list(raw(), input$species_col, input$iucn_col, input$status_col), {
     sc <- input$species_col
     if (is.null(sc) || !nzchar(sc)) return()
-    if (identical(input$src, "example") && identical(sc, "species")) {
+    if (isTRUE(input$src %in% c("example", "example_all")) && identical(sc, "species")) {
       e <- new.env(); utils::data("birds_trait_info", package = "DisentFunSpaces", envir = e)
       rv$ti <- e$birds_trait_info; rv$ti_version <- rv$ti_version + 1
     } else if (!is.null(raw()) && sc %in% names(raw())) {

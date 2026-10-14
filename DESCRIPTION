@@ -21,7 +21,7 @@ Description: Generalises the framework of Toussaint et al. (2026, Ecography,
     are computed in each space. Non-native species are positioned relative
     to the native fauna (functional novelty, loss of native uniqueness,
     change in functional richness with null models). A 'shiny' application exposes the full
-    workflow. Example data: observed traits of 1000 bird species, described by the traits of
+    workflow. Example data: observed traits of 2000 bird species, described by the traits of
     Toussaint et al. (2026), from AVONET
     (Tobias et al. 2022, <doi:10.1111/ele.13898>), EltonTraits (Wilman et
     al. 2014, <doi:10.1890/13-1917.1>) and the Amniote life-history database

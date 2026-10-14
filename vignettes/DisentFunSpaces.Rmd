@@ -12,10 +12,10 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6, fig.height
 ```
 
 This vignette applies the framework of Toussaint et al. (2026, *Ecography*,
-doi:10.1002/ecog.08578) to the example data of the package: 1000 bird species
-selected among the species of that study with the fewest missing values
-(all 281 complete species, completed with species missing one or two
-traits), described by the same traits — locomotion (five continuous traits, AVONET; Tobias et al. 2022),
+doi:10.1002/ecog.08578) to the example data of the package: 2000 bird species
+of that study (all 281 species without missing values, plus a random sample
+of species with at least one trait informed in each dimension), described by
+the same traits — locomotion (five continuous traits, AVONET; Tobias et al. 2022),
 reproduction (eight continuous traits, Amniote database; Myhrvold et al.
 2015) and diet (ten diet categories coded as one fuzzy trait, EltonTraits;
 Wilman et al. 2014). See `?birds_traits` for sources, licences and sampling.
@@ -68,8 +68,8 @@ traits <- prepare_traits(birds_traits, birds_trait_info, species_col = "species"
 traits
 ```
 
-A few reproduction traits have missing values (53 % for body length, 12 % for
-longevity, 7 % for fledging age and clutches per year);
+Reproduction traits have many missing values (from 2 % for adult body mass
+to 75 % for longevity and body length);
 `r sum(stats::complete.cases(traits$data))` species are complete. As in the published analysis, missing values are
 imputed with missForest using the first ten phylogenetic eigenvectors as
 predictors (eigenvectors can also be computed from `birds_tree` with
@@ -248,6 +248,9 @@ here:
 ```{r, eval = FALSE}
 source(system.file("scripts", "ecography_8413_species.R", package = "DisentFunSpaces"))
 ```
+
+It is also available in the Shiny application (tab 1, "Example: all 8,413
+bird species of Toussaint et al. 2026").
 
 ## Shiny application
 

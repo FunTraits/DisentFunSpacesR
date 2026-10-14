@@ -15,9 +15,9 @@
 #' @keywords internal
 "_PACKAGE"
 
-#' Example dataset: traits of 1000 bird species
+#' Example dataset: traits of 2000 bird species
 #'
-#' Observed (non-imputed, untransformed) traits of 1000 bird species selected
+#' Observed (non-imputed, untransformed) traits of 2000 bird species selected
 #' among the species analysed by Toussaint et al. (2026, *Ecography*,
 #' \doi{10.1002/ecog.08578}), described by the traits used in that paper:
 #' locomotion (five continuous traits, AVONET), reproduction (eight
@@ -30,21 +30,20 @@
 #' (source repository).
 #'
 #' **Selection.** All 281 species of the published analysis present in the
-#' phylogeny that have no missing value for the 23 traits, completed to 1000
-#' with the species having the fewest missing values (one or two; ties at
-#' random, fixed seed). BirdLife taxonomy; 28 orders and 112 families. The
-#' sample is biased towards well-studied species (e.g. 297 Passeriformes, i.e.
-#' 30 %, against about 60 % of all birds) and is meant to illustrate the
-#' workflow, not to estimate global patterns.
+#' phylogeny that have no missing value for the 23 traits, plus 1719 species
+#' drawn at random (fixed seed) among those with at least one trait informed
+#' in each dimension (locomotion, reproduction, diet), for a total of 2000
+#' species. BirdLife taxonomy; 31 orders and 182 families (1065
+#' Passeriformes).
 #'
-#' **Missing values** (3 % of trait values) concern reproduction traits
-#' only: `body_length` (53 %), `longevity_years` (12 %), `clutches_per_year`
-#' (7 %), `fledging_days` (7 %), `egg_mass` (0.4 %) and `incubation_days`
-#' (0.1 %). 281 species have no missing value, 650 one and 69 two; they can
-#' be kept (pairwise Gower distance), removed or imputed as in the published
-#' analysis (see [impute_traits()] and the vignette).
+#' **Missing values** (19 % of trait values) concern reproduction traits
+#' only: `adult_body_mass` (2 %), `clutch_size` (26 %), `egg_mass` (45 %),
+#' `incubation_days` (69 %), `fledging_days` (73 %), `clutches_per_year`
+#' (74 %), `body_length` (75 %) and `longevity_years` (75 %). As in the
+#' published analysis, they should be imputed (see [impute_traits()] and the
+#' vignette).
 #'
-#' @format A data frame with 1000 rows and 40 columns:
+#' @format A data frame with 2000 rows and 40 columns:
 #' \describe{
 #'   \item{species}{Binomial name, BirdLife taxonomy (`Genus_species`).}
 #'   \item{order, family}{BirdLife taxonomy from AVONET (not traits).}
@@ -119,7 +118,7 @@
 #'   BirdLife taxonomy (AVONET): 36 orders, 238 families. IUCN categories:
 #'   6785 LC, 686 NT, 503 VU, 284 EN, 155 CR.
 #' @source See [birds_traits].
-#' @seealso [birds_traits] (1000 species with few missing values),
+#' @seealso [birds_traits] (2000 species),
 #'   [birds_trait_info].
 #' @examples
 #' data(birds_traits_all)
@@ -130,7 +129,7 @@
 #' Phylogeny of the `birds_traits` species
 #'
 #' Time-calibrated phylogeny (class `phylo`, branch lengths in million
-#' years) of the 1000 species of [birds_traits], pruned from the tree used
+#' years) of the 2000 species of [birds_traits], pruned from the tree used
 #' in Toussaint et al. (2026): global bird phylogeny of Jetz et al. (2012)
 #' accessed through the megatrees R package (Li 2024; `bird_20221117`),
 #' made ultrametric with `phytools::force.ultrametric(method = "extend")`,
@@ -138,7 +137,7 @@
 #' species still absent added at the root of their genus
 #' (`phytools::add.species.to.genus()`).
 #'
-#' @format An object of class `phylo` with 1000 tips.
+#' @format An object of class `phylo` with 2000 tips.
 #' @source Jetz, W. et al. (2012) The global diversity of birds in space and
 #'   time. *Nature* 491: 444-448, \doi{10.1038/nature11631}. Li, D. (2024)
 #'   megatrees: mega-trees of plants and animals (R package),

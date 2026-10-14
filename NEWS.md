@@ -5,9 +5,9 @@
   documented); e.g. `body_mass` and `body_length` are no longer grouped.
 
 * The simulated example data (`toy_traits`, `toy_trait_info`, `toy_tree`)
-  are replaced by real data: `birds_traits`, 1000 bird species of
-  Toussaint et al. (2026, Ecography) with the fewest missing values (all
-  281 complete species plus species missing one or two traits),
+  are replaced by real data: `birds_traits`, 2000 bird species of
+  Toussaint et al. (2026, Ecography) (all 281 complete species plus a random
+  sample of species with at least one trait informed in each dimension),
   described by the traits of that paper (locomotion: 5 continuous traits,
   AVONET; reproduction: 8 continuous traits, Amniote database; diet: 1
   fuzzy-coded trait with 10 categories, EltonTraits; beak: 3 traits of the
@@ -21,9 +21,9 @@
   The 8,413 bird species run in about 6 min with < 4 GB of RAM.
 * `birds_traits_all`: the same traits for all 8,413 species of the paper,
   with the script `inst/scripts/ecography_8413_species.R` reproducing the
-  published analysis.
-* Examples, vignette, README, Shiny application ("Example (1000 bird
-  species, real data)") and the worked example of `inst/paper/paper_analyses.R`
+  published analysis; also available in the Shiny application (tab 1).
+* Examples, vignette, README, Shiny application ("Example: 2000 bird
+  species") and the worked example of `inst/paper/paper_analyses.R`
   use the bird data. Simulated data remain available with `simulate_traits()`
   and are used by the tests that need circular and multichoice traits.
 

@@ -7,7 +7,7 @@ suppressPackageStartupMessages({library(DisentFunSpaces); library(ggplot2)})
 out <- "paper_outputs"; dir.create(out, showWarnings = FALSE)
 R_SEED <- 2026
 
-## ---- A. Worked example: 1000 bird species (real data, ?birds_traits) ---------
+## ---- A. Worked example: 2000 bird species (real data, ?birds_traits) ---------
 ## Traits of Toussaint et al. (2026): locomotion (5), reproduction (8), diet
 ## (10 fuzzy categories). Missing values are imputed with missForest and the
 ## first ten phylogenetic eigenvectors, as in the published analysis.

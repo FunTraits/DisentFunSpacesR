@@ -35,7 +35,7 @@ dim(birds_traits_all)
 round(colMeans(is.na(birds_traits_all[, birds_trait_info$trait])), 2)
 }
 \seealso{
-[birds_traits] (1000 species with few missing values),
+[birds_traits] (2000 species),
   [birds_trait_info].
 }
 \keyword{datasets}
