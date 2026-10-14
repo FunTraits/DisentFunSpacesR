@@ -45,6 +45,7 @@ avonet <- as.data.frame(readxl::read_excel(file.path(FUSE, "data/raw/AVONET.xlsx
 ## ---- species pool and random draw ------------------------------------------------
 d <- raw[match(ready$scientificNameStd, raw$species), ]
 stopifnot(identical(d$species, ready$scientificNameStd))
+d_all <- d; ready_all <- ready                       # all 8,413 species (birds_traits_all)
 ## Selection: all species with no missing value for the 13 continuous traits
 ## and the diet (281 species), completed to 1000 with the species having the
 ## fewest missing values (ties at the cut-off broken at random, fixed seed).
@@ -67,9 +68,13 @@ d <- d[i, ]; ready <- ready[i, ]
 av <- avonet[match(gsub("_", " ", pick), avonet$Species1), ]   # BirdLife order and family
 stopifnot(!anyNA(av$Species1))
 
-## ---- assemble the trait table -----------------------------------------------------
-birds_traits <- data.frame(
-  species = pick,
+## ---- assemble the trait tables ------------------------------------------------------
+## Phylogenetic eigenvectors are those of the published analysis (Eigen.1-10 of
+## phenoBirdsImputedREADY.csv; identical to pcoaPhylogenyAves.txt for the
+## species present in the tree).
+make_table <- function(d, ready, av) {
+  out <- data.frame(
+  species = ready$scientificNameStd,
   order   = av$Order1,
   family  = av$Family1,
   # Locomotion (AVONET; mm, g)
@@ -98,11 +103,19 @@ birds_traits <- data.frame(
   beak_depth  = d$Beak.Depth,
   # threat status and imputation predictors (not traits)
   iucn = ready$iucn_category,
-  eig[match(pick, eig$scientificNameStd), paste0("Eigen.", 1:10)],
+  ready[, paste0("Eigen.", 1:10)],
   stringsAsFactors = FALSE, row.names = NULL
 )
-num <- vapply(birds_traits, is.numeric, logical(1))
-birds_traits[num] <- lapply(birds_traits[num], function(x) signif(x, 6))
+  num <- vapply(out, is.numeric, logical(1))
+  out[num] <- lapply(out[num], function(x) signif(x, 6))
+  out
+}
+birds_traits <- make_table(d, ready, av)
+stopifnot(identical(birds_traits$species, pick))
+av_all <- avonet[match(gsub("_", " ", ready_all$scientificNameStd), avonet$Species1), ]
+stopifnot(!anyNA(av_all$Species1))
+birds_traits_all <- make_table(d_all, ready_all, av_all)
+
 
 ## ---- trait-information table ----------------------------------------------------
 tr <- function(trait, type, dimension, block = trait, transform = "none", use = TRUE)
@@ -133,3 +146,5 @@ print(mean(stats::complete.cases(birds_traits[birds_trait_info$trait[birds_trait
 save(birds_traits, file = "data/birds_traits.rda", compress = "xz")
 save(birds_trait_info, file = "data/birds_trait_info.rda", compress = "xz")
 save(birds_tree, file = "data/birds_tree.rda", compress = "xz")
+DisentFunSpaces::check_trait_info(birds_trait_info, birds_traits_all)
+save(birds_traits_all, file = "data/birds_traits_all.rda", compress = "xz")

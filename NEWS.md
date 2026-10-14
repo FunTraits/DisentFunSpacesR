@@ -14,6 +14,14 @@
   validation space, `use = FALSE`), with real missing values, IUCN
   categories and 10 phylogenetic eigenvectors; `birds_trait_info` and
   `birds_tree` (script `data-raw/birds_traits.R`).
+* Large datasets: `trait_distance()` accumulates per-variable distances one
+  at a time (memory no longer grows with the number of traits), and
+  `PCoAGraph()` uses a memory-lean PCoA (same result as `ape::pcoa()`) for
+  3000 species or more without correction (`options(DisentFunSpaces.lean_pcoa_n)`).
+  The 8,413 bird species run in about 6 min with < 4 GB of RAM.
+* `birds_traits_all`: the same traits for all 8,413 species of the paper,
+  with the script `inst/scripts/ecography_8413_species.R` reproducing the
+  published analysis.
 * Examples, vignette, README, Shiny application ("Example (1000 bird
   species, real data)") and the worked example of `inst/paper/paper_analyses.R`
   use the bird data. Simulated data remain available with `simulate_traits()`

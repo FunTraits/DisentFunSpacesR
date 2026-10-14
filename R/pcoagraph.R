@@ -5,7 +5,9 @@
 #' unchanged. Trait tables of different types are combined with
 #' [ade4::ktab.list.df()], the generalised Gower distance between species is
 #' computed with [ade4::dist.ktab()] (`option = "scaledBYrange"`), and the
-#' distance is ordinated with [ape::pcoa()]. Traits are then related to the
+#' distance is ordinated with [ape::pcoa()] (for 3000 species or more without
+#' correction, an equivalent memory-lean implementation is used, see
+#' `options(DisentFunSpaces.lean_pcoa_n)`). Traits are then related to the
 #' axes with [vegan::envfit()] (`varPlot`) and with correlations between each
 #' trait and each PCoA axis (`PCoACor`, function `CorrelType` of the original
 #' scripts).
@@ -86,7 +88,12 @@ PCoAGraph <- function(x, datax, namesx, groups, saveFile = NA,
   }
 
   # --- Run PCoA ---
-  PCoATraits <- ape::pcoa(disTraits, correction = correction)
+  lean_n <- getOption("DisentFunSpaces.lean_pcoa_n", 3000)
+  PCoATraits <- if (identical(correction, "none") && length(namesx) >= lean_n) {
+    .pcoa_lean(disTraits)        # same result as ape::pcoa, less memory
+  } else {
+    ape::pcoa(disTraits, correction = correction)
+  }
   rownames(PCoATraits$vectors) <- namesx
   if (!is.null(PCoATraits$vectors.cor)) rownames(PCoATraits$vectors.cor) <- namesx
 

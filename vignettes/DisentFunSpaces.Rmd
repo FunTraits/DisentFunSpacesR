@@ -237,6 +237,18 @@ compare_nonnative(nn, "FNov", top = 0.2)$pairs
 plot_nonnative(spaces$Combined, status, label = 5)
 ```
 
+## 7. The full dataset of the published analysis
+
+`birds_traits_all` contains the same traits for all 8,413 species analysed by
+Toussaint et al. (2026), with 22 % of missing values (reproduction traits).
+The analysis is the same as above; with 8,413 species it needs about 4 GB of
+memory and several minutes, so it is provided as a script rather than run
+here:
+
+```{r, eval = FALSE}
+source(system.file("scripts", "ecography_8413_species.R", package = "DisentFunSpaces"))
+```
+
 ## Shiny application
 
 The same workflow is available interactively with `run_app()`, which also

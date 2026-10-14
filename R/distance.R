@@ -107,17 +107,19 @@ trait_distance <- function(x, dimensions = NULL,
     attr(d, "Size") <- n; attr(d, "Diag") <- FALSE; attr(d, "Upper") <- FALSE
     class(d) <- "dist"
   } else {
-    single <- lapply(seq_along(vars$tables), function(i) {
+    # per-variable distances are computed one at a time and accumulated, so
+    # that memory does not grow with the number of variables
+    one <- function(i) {
       if (engine == "fast") return(.var_dist(vars$tables[[i]], vt$type[i]))
       as.vector(ade4::dist.ktab(ade4::ktab.list.df(vars$tables[i]), vt$type[i], option = option))
-    })
+    }
     if (weighting == "variable") {
-      d2 <- .wmean_sq(single, vt$weight)
+      d2 <- .wmean_sq_stream(seq_along(vars$tables), one, vt$weight)
     } else {
       dims <- unique(vt$dimension)
       per_dim <- lapply(dims, function(dm) {
         idx <- which(vt$dimension == dm)
-        sqrt(.wmean_sq(single[idx], vt$weight[idx]))
+        sqrt(.wmean_sq_stream(idx, one, vt$weight))
       })
       if (weighting == "dimension_scaled") per_dim <- lapply(per_dim, .unit_ms)
       d2 <- .wmean_sq(per_dim, rep(1, length(dims)))
@@ -211,6 +213,23 @@ trait_distance <- function(x, dimensions = NULL,
     ok <- !is.na(ds[[i]])
     num <- num + ifelse(ok, w[i] * ds[[i]]^2, 0)
     den <- den + w[i] * ok
+  }
+  out <- num / den
+  out[den == 0] <- NA
+  out
+}
+
+# same as .wmean_sq(), computing the distance of each variable `i` with
+# `fun(i)` only when needed (low memory)
+.wmean_sq_stream <- function(idx, fun, w) {
+  num <- 0; den <- 0
+  for (i in idx) {
+    di <- fun(i)
+    ok <- !is.na(di)
+    di[!ok] <- 0
+    num <- num + w[i] * di * di
+    den <- den + w[i] * ok
+    rm(di, ok)
   }
   out <- num / den
   out[den == 0] <- NA

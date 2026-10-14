@@ -198,3 +198,20 @@ test_that("identical profiles get exactly FUn = 0 and are counted", {
   expect_warning(compare_metrics(mm, "FSp", top = 0.1), NA)
   expect_warning(compare_metrics(transform(mm, FUn = 0), "FUn", top = 0.1), "uninformative")
 })
+
+test_that("the memory-lean PCoA gives the same result as ape::pcoa", {
+  for (tr in list(ex(), ex(FALSE))) {
+    d <- trait_distance(tr)
+    a <- ape::pcoa(d)
+    b <- DisentFunSpaces:::.pcoa_lean(d)
+    expect_equal(a$values, b$values, tolerance = 1e-8)
+    expect_equal(abs(unname(a$vectors)), abs(unname(b$vectors)), tolerance = 1e-6)
+    expect_equal(a$trace, b$trace, tolerance = 1e-10)
+  }
+  old <- options(DisentFunSpaces.lean_pcoa_n = 10)
+  on.exit(options(old))
+  sp1 <- build_space(ex(), "Locomotion", envfit_perm = 0)
+  options(DisentFunSpaces.lean_pcoa_n = 1e6)
+  sp2 <- build_space(ex(), "Locomotion", envfit_perm = 0)
+  expect_equal(abs(unname(sp1$coords)), abs(unname(sp2$coords)), tolerance = 1e-6)
+})

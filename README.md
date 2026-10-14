@@ -143,5 +143,8 @@ reproducing the analysis).
   1.0, Wilman et al. 2014, CC0) and the beak traits of the validation space
   (`use = FALSE`) — with real missing values, IUCN categories and 10
   phylogenetic eigenvectors; `birds_trait_info` and `birds_tree` (see
-  `?birds_traits` and `data-raw/birds_traits.R`). Simulated data with
+  `?birds_traits` and `data-raw/birds_traits.R`). `birds_traits_all`: the
+  same traits for all 8,413 species of the paper (22 % missing values); the
+  full analysis is run by
+  `system.file("scripts", "ecography_8413_species.R", package = "DisentFunSpaces")`. Simulated data with
   known congruence: `simulate_traits()`.

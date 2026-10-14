@@ -91,6 +91,7 @@ table(birds_traits$iucn)
 round(colMeans(is.na(birds_traits[, birds_trait_info$trait])), 2)
 }
 \seealso{
-[birds_trait_info], [birds_tree]
+[birds_traits_all] (all 8,413 species of the paper),
+  [birds_trait_info], [birds_tree]
 }
 \keyword{datasets}

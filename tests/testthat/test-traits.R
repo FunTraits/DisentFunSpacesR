@@ -78,3 +78,13 @@ test_that("simulate_traits returns valid data with the target congruence", {
   expect_setequal(unique(tr$trait_info$type), c("Q", "N", "F", "O", "C", "B", "D"))
   expect_error(simulate_traits(50, cor_dims = 1.5), "valid correlation")
 })
+
+test_that("the full dataset has the structure of the example", {
+  expect_equal(nrow(birds_traits_all), 8413)
+  expect_identical(names(birds_traits_all), names(birds_traits))
+  expect_true(all(birds_traits$species %in% birds_traits_all$species))
+  sub <- birds_traits_all[match(birds_traits$species, birds_traits_all$species), ]
+  rownames(sub) <- NULL
+  expect_equal(sub, birds_traits)
+  expect_silent(check_trait_info(birds_trait_info, birds_traits_all))
+})

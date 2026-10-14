@@ -92,12 +92,40 @@
 #'   <https://www.iucnredlist.org>. Categories are provided for
 #'   demonstration; use the current Red List for research.
 #'
-#' @seealso [birds_trait_info], [birds_tree]
+#' @seealso [birds_traits_all] (all 8,413 species of the paper),
+#'   [birds_trait_info], [birds_tree]
 #' @examples
 #' data(birds_traits)
 #' table(birds_traits$iucn)
 #' round(colMeans(is.na(birds_traits[, birds_trait_info$trait])), 2)
 "birds_traits"
+
+#' Full example dataset: the 8,413 bird species of Toussaint et al. (2026)
+#'
+#' Same columns as [birds_traits] (see that page for the description of
+#' variables and sources) for all 8,413 species analysed by Toussaint et al.
+#' (2026, *Ecography*, \doi{10.1002/ecog.08578}), with observed
+#' (non-imputed) trait values: 22 % of trait values are missing (all in
+#' reproduction traits; 632 species have none of the eight reproduction
+#' traits), as reported in the paper (23 %). Use it with [birds_trait_info]
+#' to reproduce the published analysis: missing values imputed with
+#' [impute_traits()] using `Eigen.1`-`Eigen.10` as predictors, then
+#' [build_spaces()], [compare_spaces()] and [species_metrics_all()]. The
+#' script `system.file("scripts", "ecography_8413_species.R", package =
+#' "DisentFunSpaces")` runs the full analysis (about 4 GB of RAM and several
+#' minutes), so this dataset is not used in examples or in the vignette.
+#'
+#' @format A data frame with 8413 rows and 40 columns (see [birds_traits]).
+#'   BirdLife taxonomy (AVONET): 36 orders, 238 families. IUCN categories:
+#'   6785 LC, 686 NT, 503 VU, 284 EN, 155 CR.
+#' @source See [birds_traits].
+#' @seealso [birds_traits] (1000 species with few missing values),
+#'   [birds_trait_info].
+#' @examples
+#' data(birds_traits_all)
+#' dim(birds_traits_all)
+#' round(colMeans(is.na(birds_traits_all[, birds_trait_info$trait])), 2)
+"birds_traits_all"
 
 #' Phylogeny of the `birds_traits` species
 #'
