@@ -354,6 +354,9 @@ app_server <- function(input, output, session) {
                                                 "nativeness", "alien", "introduced"))[1]]
     shiny::updateSelectInput(session, "status_col", choices = c("(none)" = "", cols),
                              selected = if (is.na(guess_st)) "" else guess_st)
+    # the full bird dataset has species pairs sharing no reproduction trait:
+    # propose imputation (as in the published analysis)
+    if (identical(input$src, "example_all")) shiny::updateRadioButtons(session, "missing", selected = "impute")
     rv$ti <- NULL; rv$traits <- NULL; rv$traits_final <- NULL
     rv$spaces <- NULL; rv$cmp <- NULL; rv$metrics <- NULL; rv$nonnative <- NULL
   })

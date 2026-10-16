@@ -134,7 +134,8 @@ reproducing the analysis).
   FRic, FDis, FOri, MPD) with `"permute"` or `"pool"` null models.
 * Example data: `birds_traits`, 2000 bird species of Toussaint et al.
   (2026) (all 281 complete species plus a random sample of species with at
-  least one trait informed in each dimension), described by the traits of that
+  least one trait informed in each dimension, including adult body mass),
+  described by the traits of that
   paper — locomotion (tarsus length, wing length, Kipp's distance, tail
   length, body mass; AVONET, Tobias et al. 2022, CC BY 4.0), reproduction
   (clutch size, clutches per year, adult body mass, incubation time,

@@ -88,3 +88,10 @@ test_that("the full dataset has the structure of the example", {
   expect_equal(sub, birds_traits)
   expect_silent(check_trait_info(birds_trait_info, birds_traits_all))
 })
+
+test_that("all pairs of example species share traits in every dimension", {
+  tr <- prepare_traits(birds_traits, birds_trait_info, species_col = "species")
+  for (dm in unique(tr$trait_info$dimension))
+    expect_false(anyNA(trait_distance(tr, dm, engine = "fast")), label = dm)
+  expect_false(anyNA(birds_traits$adult_body_mass))
+})

@@ -14,7 +14,8 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6, fig.height
 This vignette applies the framework of Toussaint et al. (2026, *Ecography*,
 doi:10.1002/ecog.08578) to the example data of the package: 2000 bird species
 of that study (all 281 species without missing values, plus a random sample
-of species with at least one trait informed in each dimension), described by
+of species with at least one trait informed in each dimension, adult body
+mass being required for reproduction), described by
 the same traits — locomotion (five continuous traits, AVONET; Tobias et al. 2022),
 reproduction (eight continuous traits, Amniote database; Myhrvold et al.
 2015) and diet (ten diet categories coded as one fuzzy trait, EltonTraits;
@@ -68,14 +69,16 @@ traits <- prepare_traits(birds_traits, birds_trait_info, species_col = "species"
 traits
 ```
 
-Reproduction traits have many missing values (from 2 % for adult body mass
-to 75 % for longevity and body length);
+Reproduction traits have many missing values (from 26 % for clutch size to
+73 % for longevity and body length; adult body mass is complete);
 `r sum(stats::complete.cases(traits$data))` species are complete. As in the published analysis, missing values are
 imputed with missForest using the first ten phylogenetic eigenvectors as
 predictors (eigenvectors can also be computed from `birds_tree` with
-`phylo = birds_tree`). Missing values could also be kept (the generalised
+`phylo = birds_tree`). Missing values could also be kept: the generalised
 Gower distance then uses, for each pair of species, the traits available for
-both) or removed with `drop_incomplete()`.
+both (every pair of species of this example shares at least adult body mass,
+so the distance is always defined), but the reproduction space is then
+non-Euclidean. They could also be removed with `drop_incomplete()`.
 
 ```{r}
 preds <- birds_traits[, paste0("Eigen.", 1:10)]

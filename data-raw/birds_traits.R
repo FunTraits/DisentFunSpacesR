@@ -21,7 +21,8 @@
 ## Species selection: species of the analysis present in the phylogeny and in
 ## the eigenvector table: all species with no missing value (281) plus a
 ## random sample of the species with at least one trait informed in each
-## dimension, for a total of 2000 species (fixed seed).
+## dimension (adult body mass for reproduction, so that all pairs of species
+## share traits), for a total of 2000 species (fixed seed).
 ##
 ## Run from the package root:  source("data-raw/birds_traits.R")
 ## ---------------------------------------------------------------------------
@@ -49,14 +50,18 @@ d_all <- d; ready_all <- ready                       # all 8,413 species (birds_
 ## Selection: all species with no missing value for the 13 continuous traits
 ## and the diet (281 species), plus a random sample (fixed seed) of the
 ## species with at least one trait informed in each dimension (locomotion,
-## reproduction, diet), for a total of 2000 species.
+## reproduction including adult body mass, diet), for a total of 2000 species.
 loco_cols  <- c("Tarsus.Length", "Wing.Length", "Kipps.Distance", "Tail.Length", "Mass")
 repro_cols <- c("litter_or_clutch_size_n", "litters_or_clutches_per_y", "adult_body_mass_g",
                 "incubation_d", "longevity_y", "fledging_age_d", "egg_mass_g", "adult_svl_cm")
 diet_cols  <- grep("^Diet\\.", names(d), value = TRUE)
 n_obs <- function(cols) rowSums(!is.na(d[, cols]))
+## The informed reproduction trait must include adult body mass (the most
+## complete one, 90 % of species): every pair of species then shares at least
+## one trait in each dimension, so that the generalised Gower distance is
+## defined for all pairs even without imputation.
 pool <- d$species %in% tree$tip.label & d$species %in% eig$scientificNameStd &
-  n_obs(loco_cols) >= 1 & n_obs(repro_cols) >= 1 & n_obs(diet_cols) >= 1
+  n_obs(loco_cols) >= 1 & !is.na(d$adult_body_mass_g) & n_obs(diet_cols) >= 1
 d <- d[pool, ]; ready <- ready[pool, ]
 complete <- stats::complete.cases(d[, c(loco_cols, repro_cols, diet_cols)])
 message(nrow(d), " species in the pool; ", sum(complete), " with no missing value")
@@ -140,6 +145,10 @@ stopifnot(setequal(birds_tree$tip.label, birds_traits$species))
 
 ## ---- checks and save -------------------------------------------------------------
 DisentFunSpaces::check_trait_info(birds_trait_info, birds_traits)
+## every pair of species shares at least one trait in each dimension
+tr0 <- DisentFunSpaces::prepare_traits(birds_traits, birds_trait_info, "species")
+for (dm in c("Locomotion", "Reproduction", "Diet"))
+  stopifnot(!anyNA(DisentFunSpaces::trait_distance(tr0, dm, engine = "fast")))
 print(table(birds_traits$iucn))
 print(round(100 * colMeans(is.na(birds_traits[birds_trait_info$trait])), 1))
 print(mean(stats::complete.cases(birds_traits[birds_trait_info$trait[birds_trait_info$use]])))

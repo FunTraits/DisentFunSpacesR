@@ -32,16 +32,18 @@
 #' **Selection.** All 281 species of the published analysis present in the
 #' phylogeny that have no missing value for the 23 traits, plus 1719 species
 #' drawn at random (fixed seed) among those with at least one trait informed
-#' in each dimension (locomotion, reproduction, diet), for a total of 2000
-#' species. BirdLife taxonomy; 31 orders and 182 families (1065
-#' Passeriformes).
+#' in each dimension, adult body mass being required for reproduction (90 %
+#' of species): every pair of species therefore shares at least one trait
+#' in each dimension and the generalised Gower distance is defined without
+#' imputation. 2000 species; BirdLife taxonomy, 31 orders and 176 families
+#' (1006 Passeriformes).
 #'
 #' **Missing values** (19 % of trait values) concern reproduction traits
-#' only: `adult_body_mass` (2 %), `clutch_size` (26 %), `egg_mass` (45 %),
-#' `incubation_days` (69 %), `fledging_days` (73 %), `clutches_per_year`
-#' (74 %), `body_length` (75 %) and `longevity_years` (75 %). As in the
-#' published analysis, they should be imputed (see [impute_traits()] and the
-#' vignette).
+#' only: `clutch_size` (26 %), `egg_mass` (44 %), `incubation_days` (67 %),
+#' `fledging_days` (70 %), `clutches_per_year` (71 %), `body_length` (73 %)
+#' and `longevity_years` (73 %); `adult_body_mass` is complete. They can be
+#' kept (pairwise Gower distance) or imputed as in the published analysis
+#' (see [impute_traits()] and the vignette).
 #'
 #' @format A data frame with 2000 rows and 40 columns:
 #' \describe{

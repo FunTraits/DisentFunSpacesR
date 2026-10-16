@@ -7,7 +7,8 @@
 * The simulated example data (`toy_traits`, `toy_trait_info`, `toy_tree`)
   are replaced by real data: `birds_traits`, 2000 bird species of
   Toussaint et al. (2026, Ecography) (all 281 complete species plus a random
-  sample of species with at least one trait informed in each dimension),
+  sample of species with at least one trait informed in each dimension,
+  adult body mass required so that all pairs of species share traits),
   described by the traits of that paper (locomotion: 5 continuous traits,
   AVONET; reproduction: 8 continuous traits, Amniote database; diet: 1
   fuzzy-coded trait with 10 categories, EltonTraits; beak: 3 traits of the
