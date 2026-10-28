@@ -1,3 +1,53 @@
+# DisentFunSpaces 0.6.0
+
+Faster computations and a Shiny application for large datasets. All the
+changes below give the same results as before (checked against the previous
+implementations in `tests/testthat/test-performance.R`), except where stated.
+
+## Shiny application
+
+* New "Performance" panel (tab 4). By default ("auto"), from 1000 species,
+  distances are computed with the fast engine (`dist.ktab()` exceeded 6 GB
+  of RAM for the 8,413 bird species) and the PCoA with a partial
+  eigendecomposition of all positive axes (same results as the published
+  settings). From 3000 species (`options(DisentFunSpaces.app_large_n)`) the
+  app shows the memory needed and advice.
+* Procrustes permutations can use several CPU cores (macOS / Linux) with
+  identical results.
+* Text files are read with `data.table::fread()` when installed; upload limit
+  raised to 1 GB (`run_app(max_upload_mb =)`).
+* Plots are cached (`shiny::bindCache()`): changing tab or going back to a
+  space does not redraw it; the arrow threshold slider is debounced.
+* The exported R script reproduces the engine, partial PCoA and core settings.
+* Hint when R uses its reference BLAS (an optimised BLAS speeds up PCoA and
+  Procrustes tests several times).
+
+## Functions
+
+* `build_space()` / `build_spaces()`: new argument `eigen = "partial"`:
+  only the axes kept are computed (Lanczos algorithm, package 'RSpectra', in
+  Suggests): all positive-eigenvalue axes by default (falls back to the full
+  decomposition beyond 500 positive axes, `options(DisentFunSpaces.partial_k_max)`),
+  or the first `max_axes`. Same coordinates (up to sign) and relative
+  inertia; broken-stick values and negative-eigenvalue diagnostics are not
+  available. Default unchanged (`"full"`). Combined space of the 8,413 bird
+  species: 5 s instead of 11 min.
+* `PCoAGraph()`: new arguments `partial` and `n_axes` (partial eigendecomposition).
+* `CorrelType()`: vectorised over axes (one matrix operation per trait instead
+  of one `cor()` / `lm()` call per trait x axis).
+* `trait_distance(engine = "fast")`: about 1.5x faster and less memory
+  (fewer temporary vectors of length n(n-1)/2); values unchanged (identical).
+* `compare_spaces(method = "ade4")`: exact re-implementation of
+  `ade4::procuste.rtest()` computing singular values only (same permutations,
+  same p-values); new argument `cores`.
+* `nonnative_species()` / `nonnative_assemblage()`: the inside/outside test
+  uses the facets of a single convex hull instead of one hull per non-native
+  species; FOri and MPD no longer build an n x n matrix; with the
+  `"permute"` null model the distances of the current assemblage are
+  computed once and MPD / FOri of each replicate are updated from them; with
+  the `"pool"` null model the historical assemblage is computed once. One
+  space of 8,413 species, 9 replicates: 4 s instead of 225 s.
+
 # DisentFunSpaces 0.5.1
 
 * `guess_trait_info()`: columns sharing a prefix are proposed as a

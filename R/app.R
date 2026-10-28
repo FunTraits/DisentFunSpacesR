@@ -8,14 +8,54 @@
 #'
 #' @param launch.browser Passed to [shiny::runApp()].
 #' @param max_upload_mb Maximum upload size (MB).
+#' @details Large datasets: from 1000 species the app uses, by default
+#'   ("Performance" panel of tab 4), the fast distance engine (same values as
+#'   `ade4::dist.ktab()`, much less memory) and a partial eigendecomposition
+#'   (package 'RSpectra') that computes only the axes kept - by default all
+#'   positive-eigenvalue axes, as in the published analysis. From 3000
+#'   species (`options(DisentFunSpaces.app_large_n)`) the app shows memory
+#'   estimates and advice. Text files are read with
+#'   `data.table::fread()` when installed. Procrustes permutations can use
+#'   several cores (macOS / Linux) without changing the results. Computations
+#'   on matrices (PCoA, Procrustes) are much faster with an optimised BLAS
+#'   (e.g. Accelerate on macOS, OpenBLAS on Linux).
 #' @param ... Further arguments to [shiny::runApp()].
 #' @return Called for its side effect.
 #' @export
 #' @examples
 #' if (interactive()) run_app()
-run_app <- function(launch.browser = TRUE, max_upload_mb = 200, ...) {
+run_app <- function(launch.browser = TRUE, max_upload_mb = 1000, ...) {
   options(shiny.maxRequestSize = max_upload_mb * 1024^2)
   shiny::runApp(fs_app(), launch.browser = launch.browser, ...)
+}
+
+# Large-data settings used by the app ----------------------------------------
+# number of species from which the app treats a dataset as "large" (fast
+# distance engine, partial PCoA with a limited number of axes)
+.app_large_n <- function() getOption("DisentFunSpaces.app_large_n", 3000)
+.app_cores <- function() {
+  if (.Platform$OS.type != "unix") return(1L)
+  n <- tryCatch(parallel::detectCores(logical = FALSE), error = function(e) NA)
+  if (is.na(n)) n <- 1L
+  as.integer(max(1L, min(8L, n - 1L)))
+}
+# reference (unoptimised) BLAS in use? PCoA and Procrustes tests are then
+# several times slower than with an optimised BLAS (Accelerate, OpenBLAS, MKL)
+.reference_blas <- function() {
+  b <- tryCatch(utils::sessionInfo()$BLAS, error = function(e) "")
+  length(b) == 1 && nzchar(b) && grepl("libRblas", b, fixed = TRUE)
+}
+# fast reader for large text files ('data.table' if installed)
+.read_table_fast <- function(path, sep) {
+  if (requireNamespace("data.table", quietly = TRUE)) {
+    d <- data.table::fread(path, sep = sep, header = TRUE, na.strings = c("NA", ""),
+                           check.names = FALSE, data.table = FALSE, showProgress = FALSE,
+                           integer64 = "double", quote = "\"")
+    return(d)
+  }
+  utils::read.table(path, header = TRUE, sep = sep, quote = "\"",
+                    stringsAsFactors = FALSE, check.names = FALSE, na.strings = c("NA", ""),
+                    comment.char = "")
 }
 
 #' @rdname run_app
@@ -57,10 +97,10 @@ app_ui <- function() {
           shiny::conditionalPanel("input.src == 'example_all'",
             shiny::tags$p(class = "step-help",
               "Full dataset of the Ecography paper (22 % missing values, impute them in tab 3).",
-              " Building the spaces of 8,413 species takes several minutes and about 4 GB of RAM;",
-              " the Procrustes and non-native analyses also take longer.")),
+              " With the default large-data settings of tab 4 (fast distance, partial PCoA),",
+              " each space is built in less than a minute.")),
           shiny::conditionalPanel("input.src == 'upload'",
-            shiny::fileInput("file", "Trait table (.csv, .tsv, .txt, .xlsx)",
+            shiny::fileInput("file", "Trait table (.csv, .tsv, .txt, .xlsx; up to 1 GB)",
                              accept = c(".csv", ".tsv", ".txt", ".xlsx", ".xls")),
             shiny::selectInput("sep", "Separator (text files)",
                                c("Comma" = ",", "Semicolon" = ";", "Tab" = "\t"))),
@@ -72,6 +112,7 @@ app_ui <- function() {
                " and multichoice traits). Intraspecific records must be aggregated beforehand.")
         ),
         bslib::card(bslib::card_header("Preview"), shiny::uiOutput("data_info"),
+                    shiny::uiOutput("perf_info"),
                     DT::DTOutput("data_preview"))
       )
     ),
@@ -152,6 +193,21 @@ app_ui <- function() {
                              c("None (published analysis)" = "none", "Cailliez" = "cailliez", "Lingoes" = "lingoes")),
           shiny::numericInput("max_axes", "Max. PCoA axes kept (empty = all, as published)",
                               value = NA, min = 2, step = 1),
+          bslib::accordion(open = FALSE,
+            bslib::accordion_panel("Performance (large datasets)",
+              shiny::selectInput("engine", "Distance computation", c(
+                "Auto (fast from 1000 species)" = "auto",
+                "ade4::dist.ktab (published analysis)" = "ade4",
+                "Fast (same values, low memory)" = "fast")),
+              shiny::selectInput("eigen_mode", "PCoA eigendecomposition", c(
+                "Auto (partial from 1000 species)" = "auto",
+                "Full (published analysis)" = "full",
+                "Partial: axes kept only (RSpectra)" = "partial")),
+              shiny::tags$p(class = "step-help",
+                "Fast distances and the partial PCoA give the same distances, coordinates and",
+                " inertia as the published analysis (signs of axes are arbitrary). The partial PCoA",
+                " computes all positive axes (or the max. number of axes set above) without the full",
+                " eigendecomposition; it does not report negative eigenvalues. Requires 'RSpectra'."))),
           shiny::tags$p(class = "step-help",
             "Distances: ade4::dist.ktab (one table per dimension x type); PCoA: ape::pcoa (PCoAGraph)."),
           shiny::actionButton("run_spaces", "Build spaces", class = "btn-primary w-100")
@@ -190,6 +246,8 @@ app_ui <- function() {
           shiny::conditionalPanel("input.axes_mode == 'k'",
             shiny::numericInput("n_axes", "k", 4, 1, 50)),
           shiny::checkboxInput("mantel", "Add Mantel tests on distances", FALSE),
+          if (.Platform$OS.type == "unix")
+            shiny::numericInput("cores", "CPU cores for permutations (same results)", .app_cores(), 1, 64),
           shiny::actionButton("run_compare", "Run comparisons", class = "btn-primary w-100")
         ),
         bslib::layout_columns(col_widths = c(6, 6),
@@ -313,7 +371,7 @@ app_ui <- function() {
 app_server <- function(input, output, session) {
   rv <- shiny::reactiveValues(ti = NULL, traits = NULL, traits_final = NULL, spaces = NULL,
                               cmp = NULL, metrics = NULL, nonnative = NULL,
-                              nn_status = NULL, custom = list(), ti_version = 0,
+                              nn_status = NULL, custom = list(), ti_version = 0, spaces_version = 0,
                               valid_msg = NULL, missing_msg = NULL, phylo_name = NULL)
   notify_error <- function(e) shiny::showNotification(conditionMessage(e), type = "error", duration = 10)
 
@@ -331,9 +389,7 @@ app_server <- function(input, output, session) {
         if (!requireNamespace("readxl", quietly = TRUE)) stop("Install 'readxl' to read Excel files.")
         as.data.frame(readxl::read_excel(path))
       } else {
-        utils::read.table(path, header = TRUE, sep = input$sep, quote = "\"",
-                          stringsAsFactors = FALSE, check.names = FALSE, na.strings = c("NA", ""),
-                          comment.char = "")
+        .read_table_fast(path, input$sep)
       }
     }, error = function(e) { notify_error(e); NULL })
   })
@@ -366,8 +422,27 @@ app_server <- function(input, output, session) {
     shiny::tags$p(sprintf("%d species x %d columns - %.1f%% missing cells",
                           nrow(d), ncol(d), 100 * mean(is.na(d))))
   })
+  output$perf_info <- shiny::renderUI({
+    d <- raw(); shiny::req(d)
+    n <- nrow(d)
+    if (n < .app_large_n()) return(NULL)
+    gb <- 8 * n^2 / 1024^3
+    shiny::tags$div(class = "alert alert-info", style = "font-size: 0.9rem;",
+      shiny::tags$b("Large dataset. "),
+      sprintf(paste0("One %d x %d distance matrix takes %.1f GB of RAM (plan about %.0f GB free).",
+                     " By default (tab 4, 'Performance') the app computes distances with the fast",
+                     " engine and only the positive PCoA axes, without a full eigendecomposition."),
+              n, n, gb, max(2, ceiling(4 * gb))),
+      if (!requireNamespace("RSpectra", quietly = TRUE)) shiny::tags$span(
+        shiny::tags$b(" Install the package 'RSpectra'"),
+        " (install.packages('RSpectra')): without it the full eigendecomposition is used,",
+        " which takes about ten minutes per space for 8,000 species."),
+      if (.reference_blas()) shiny::tags$span(
+        " R uses its reference BLAS: an optimised BLAS (Accelerate on macOS, OpenBLAS on",
+        " Linux) makes PCoA and Procrustes tests several times faster."))
+  })
   output$data_preview <- DT::renderDT(DT::datatable(raw(), options = list(scrollX = TRUE, pageLength = 10),
-                                                    rownames = FALSE))
+                                                    rownames = FALSE), server = TRUE)
 
   # ---- 2. trait information --------------------------------------------------
   trait_cols <- shiny::reactive({
@@ -488,6 +563,10 @@ app_server <- function(input, output, session) {
     shiny::updateCheckboxGroupInput(session, "spaces_sel", choices = names(sp), selected = names(sp))
     shiny::updateSelectizeInput(session, "custom_dims", choices = dims)
     rv$custom <- list()
+    if (length(res$tr$species) >= .app_large_n())
+      shiny::showNotification(sprintf(paste0("%d species: the spaces will be built with fast distances and a",
+                                             " partial PCoA (tab 4, 'Performance')."),
+                                      length(res$tr$species)), type = "message", duration = 10)
     shiny::showNotification(sprintf("%d species, %d traits in %d dimension(s).",
                                     length(res$tr$species), nrow(trait_summary(res$tr)), length(dims)),
                             type = "message")
@@ -585,12 +664,21 @@ app_server <- function(input, output, session) {
     all_sp <- c(default_spaces(tr), rv$custom)[input$spaces_sel]
     res <- tryCatch(shiny::withProgress(message = "Building spaces", value = 0, {
       mx <- if (is.null(input$max_axes) || is.na(input$max_axes)) NULL else as.integer(input$max_axes)
+      n <- length(tr$species)
+      eng <- if (is.null(input$engine)) "auto" else input$engine
+      if (eng == "auto") eng <- if (n >= 1000) "fast" else "ade4"
+      em <- if (is.null(input$eigen_mode)) "auto" else input$eigen_mode
+      eig <- if (em == "auto") { if (n >= 1000) "partial" else "full" } else em
+      if (input$correction != "none") eig <- "full"
+      rv$build_settings <- list(engine = eng, eigen = eig, keep_dist = n < 5000)
       build_spaces(tr, spaces = all_sp, weighting = input$weighting, correction = input$correction,
-                   max_axes = mx, envfit_perm = 0,
-                   progress = function(i, n, nm) shiny::setProgress(i / n, detail = nm))
+                   max_axes = mx, envfit_perm = 0, engine = eng, eigen = eig,
+                   keep_dist = n < 5000,
+                   progress = function(i, n, nm) shiny::setProgress((i - 1) / n, detail = nm))
     }), error = function(e) { notify_error(e); NULL })
     shiny::req(res)
-    rv$spaces <- res; rv$cmp <- NULL; rv$metrics <- NULL
+    rv$spaces <- res; rv$cmp <- NULL; rv$metrics <- NULL; rv$nonnative <- NULL
+    rv$spaces_version <- rv$spaces_version + 1
     nms <- names(res)
     shiny::updateSelectInput(session, "plot_space", choices = nms, selected = nms[length(nms)])
     shiny::updateSelectInput(session, "res_a", choices = nms, selected = nms[1])
@@ -612,6 +700,7 @@ app_server <- function(input, output, session) {
     if (is.null(input$iucn_col) || !nzchar(input$iucn_col)) return(NULL)
     d <- raw(); stats::setNames(toupper(as.character(d[[input$iucn_col]])), as.character(d[[input$species_col]]))
   })
+  min_cor_d <- shiny::debounce(shiny::reactive(input$min_cor), 400)
   space_plot <- shiny::reactive({
     s <- sel_space()
     ax <- c(input$ax1, input$ax2)
@@ -622,22 +711,25 @@ app_server <- function(input, output, session) {
       col <- factor(iucn_vec(), levels = c("LC", "NT", "VU", "EN", "CR", "DD"))
       names(col) <- names(iucn_vec())
     }
-    p <- plot_space(s, axes = ax, min_cor = input$min_cor, color_by = col, arrows = is.null(col))
+    p <- plot_space(s, axes = ax, min_cor = min_cor_d(), color_by = col, arrows = is.null(col))
     if (!is.null(col)) p <- p + ggplot2::scale_colour_manual(
       values = c(LC = "#3B9AB2", NT = "#78B7C5", VU = "#EBCC2A", EN = "#E1AF00", CR = "#F21A00", DD = "grey60"),
       drop = TRUE, na.value = "grey80")
     p
   })
-  output$space_plot <- shiny::renderPlot(space_plot(), res = 96)
+  output$space_plot <- shiny::bindCache(shiny::renderPlot(space_plot(), res = 96),
+    rv$spaces_version, input$plot_space, input$ax1, input$ax2, min_cor_d(), input$color_iucn,
+    input$iucn_col)
   output$dl_space_plot <- shiny::downloadHandler(
     filename = function() paste0("space_", make.names(input$plot_space), ".pdf"),
     content = function(file) ggplot2::ggsave(file, space_plot(), width = 7, height = 6))
-  output$eigen_plot <- shiny::renderPlot({ shiny::req(rv$spaces); plot_eigen(rv$spaces) }, res = 96)
-  output$quality_plot <- shiny::renderPlot({
+  output$eigen_plot <- shiny::bindCache(
+    shiny::renderPlot({ shiny::req(rv$spaces); plot_eigen(rv$spaces) }, res = 96), rv$spaces_version)
+  output$quality_plot <- shiny::bindCache(shiny::renderPlot({
     s <- sel_space()
     shiny::validate(shiny::need(!is.null(s$dist), "Distance not stored (> 5000 species)."))
     plot_quality(stats::setNames(list(space_quality(s)), s$name))
-  }, res = 96)
+  }, res = 96), rv$spaces_version, input$plot_space)
   output$cor_table <- DT::renderDT({
     s <- sel_space()
     cc <- s$cor[, c("trait", "dimension", "type", intersect(paste0("PCoA", 1:4), names(s$cor)))]
@@ -650,10 +742,19 @@ app_server <- function(input, output, session) {
   shiny::observeEvent(input$run_compare, {
     shiny::req(rv$spaces)
     if (length(rv$spaces) < 2) { shiny::showNotification("Build at least two spaces.", type = "warning"); return() }
+    p_max <- max(vapply(rv$spaces, function(s) ncol(s$coords), integer(1)))
+    if (!is.null(n_axes_val())) p_max <- min(p_max, n_axes_val())
+    n_sp <- nrow(rv$spaces[[1]]$coords)
+    if (p_max > 200 && n_sp >= 2000)
+      shiny::showNotification(sprintf(paste0("Spaces with up to %d axes: each permutation computes the SVD of a",
+                                             " %d x %d matrix, which can take a long time. Use 'First k axes',",
+                                             " or fewer axes in tab 4, for a quick exploration."),
+                                      p_max, p_max, p_max), type = "warning", duration = 15)
+    cores <- if (is.null(input$cores) || is.na(input$cores)) 1L else as.integer(input$cores)
     res <- tryCatch(shiny::withProgress(message = "Procrustes tests", value = 0, {
       compare_spaces(rv$spaces, n_axes = n_axes_val(), method = input$pr_method,
-                     nrepet = input$nrepet, mantel = input$mantel,
-                     progress = function(i, n, nm) shiny::setProgress(i / n, detail = nm))
+                     nrepet = input$nrepet, mantel = input$mantel, cores = cores,
+                     progress = function(i, n, nm) shiny::setProgress((i - 1) / n, detail = nm))
     }), error = function(e) { notify_error(e); NULL })
     rv$cmp <- res
   })
@@ -674,7 +775,8 @@ app_server <- function(input, output, session) {
     shiny::validate(shiny::need(input$res_a != input$res_b, "Choose two different spaces."))
     procrustes_residuals(rv$spaces[[input$res_a]], rv$spaces[[input$res_b]], n_axes = n_axes_val())
   })
-  output$res_plot <- shiny::renderPlot(plot_procrustes(residuals_r()), res = 96)
+  output$res_plot <- shiny::bindCache(shiny::renderPlot(plot_procrustes(residuals_r()), res = 96),
+    rv$spaces_version, input$res_a, input$res_b, n_axes_val())
   output$res_table <- DT::renderDT({
     r <- residuals_r(); r$residual <- signif(r$residual, 3)
     DT::datatable(r, rownames = FALSE, options = list(pageLength = 12, dom = "ftp"))
@@ -687,8 +789,9 @@ app_server <- function(input, output, session) {
   })
   shiny::observeEvent(input$run_metrics, {
     shiny::req(rv$spaces)
-    rv$metrics <- tryCatch(species_metrics_all(rv$spaces, n_axes = n_axes_val(), k = input$k_nn,
-                                               iucn = iucn_vec()),
+    rv$metrics <- tryCatch(shiny::withProgress(message = "Species metrics", value = 0.3,
+                             species_metrics_all(rv$spaces, n_axes = n_axes_val(), k = input$k_nn,
+                                                 iucn = iucn_vec())),
                            error = function(e) { notify_error(e); NULL })
   })
   metric_cmp <- shiny::reactive({
@@ -815,6 +918,9 @@ app_server <- function(input, output, session) {
          seed = input$seed, spaces = lapply(rv$spaces, `[[`, "dimensions"),
          weighting = input$weighting, correction = input$correction,
          max_axes = if (is.null(input$max_axes) || is.na(input$max_axes)) NULL else as.integer(input$max_axes),
+         engine = rv$build_settings$engine, eigen = rv$build_settings$eigen,
+         keep_dist = rv$build_settings$keep_dist,
+         cores = if (is.null(input$cores) || is.na(input$cores)) 1L else as.integer(input$cores),
          method = input$pr_method, nrepet = input$nrepet, n_axes = n_axes_val(),
          mantel = input$mantel, k = input$k_nn)
   })

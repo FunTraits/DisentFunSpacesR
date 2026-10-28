@@ -148,8 +148,10 @@ trait_distance <- function(x, dimensions = NULL,
 .var_dist <- function(tab, type, tol = 1e-8) {
   out <- .var_dist0(tab, type)
   # ade4 sets (squared, for F/B/D/C blocks) distances below `tol` to 0
-  if (type %in% c("Q", "O", "N")) out[!is.na(out) & out < tol] <- 0
-  else out[!is.na(out) & out^2 < tol] <- 0
+  # (which() drops NA/NaN: same result as `!is.na(out) & out < tol`, without
+  # allocating three temporary vectors of length n(n-1)/2)
+  thr <- if (type %in% c("Q", "O", "N")) tol else sqrt(tol)
+  out[which(out < thr)] <- 0
   out
 }
 
@@ -222,17 +224,31 @@ trait_distance <- function(x, dimensions = NULL,
 # same as .wmean_sq(), computing the distance of each variable `i` with
 # `fun(i)` only when needed (low memory)
 .wmean_sq_stream <- function(idx, fun, w) {
-  num <- 0; den <- 0
+  # `den` stays a scalar as long as no variable has missing values (the
+  # usual case after imputation), which avoids one vector of length
+  # n(n-1)/2 per variable; the accumulation is done in place.
+  num <- NULL; den <- 0
   for (i in idx) {
     di <- fun(i)
-    ok <- !is.na(di)
-    di[!ok] <- 0
-    num <- num + w[i] * di * di
-    den <- den + w[i] * ok
-    rm(di, ok)
+    na <- which(is.na(di))
+    if (length(na)) {
+      di[na] <- 0
+      wi <- rep(w[i], length(di)); wi[na] <- 0
+      den <- den + wi
+      rm(wi)
+    } else {
+      den <- den + w[i]
+    }
+    di <- if (w[i] != 1) (w[i] * di) * di else di * di
+    if (is.null(num)) num <- di else num <- num + di
+    rm(di, na)
   }
   out <- num / den
-  out[den == 0] <- NA
+  if (length(den) == 1L) {
+    if (den == 0) out[] <- NA
+  } else {
+    out[den == 0] <- NA
+  }
   out
 }
 

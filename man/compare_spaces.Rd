@@ -11,7 +11,8 @@ compare_spaces(
   nrepet = 999,
   mantel = FALSE,
   seed = 1,
-  progress = NULL
+  progress = NULL,
+  cores = 1
 )
 }
 \arguments{
@@ -31,6 +32,13 @@ vector of length 2 or more is allowed to explore sensitivity, e.g.
 \item{seed}{Random seed.}
 
 \item{progress}{Optional function `progress(i, n, label)`.}
+
+\item{cores}{Number of CPU cores used for the permutations of
+`method = "ade4"` (forked processes, Unix/macOS only; ignored on
+Windows), when at least 50 axes are compared (below that, forking costs
+more than it saves). Results do not depend
+on `cores`: the permutations are drawn beforehand, in the same order as
+`ade4::procuste.rtest()`.}
 }
 \value{
 An object of class `fs_comparison`: `table` (one row per pair:
@@ -50,6 +58,11 @@ compared with a permutation test of the Procrustes correlation:
 \details{
 A Mantel test between the two functional distance matrices can be added
 (`mantel = TRUE`) when the spaces were built with `keep_dist = TRUE`.
+
+With `method = "ade4"` the test is an exact re-implementation of
+  [ade4::procuste.rtest()] (same statistic, same random permutations for a
+  given seed, hence the same p-values) that computes singular values only,
+  which is several times faster when many axes are used.
 }
 \examples{
 data(birds_traits); data(birds_trait_info)

@@ -52,6 +52,18 @@ utils::globalVariables(c("a1", "a2", "position", "FUSI", "species", "space", "va
 .in_hull <- function(X, P, rel_tol = 1e-7) {
   v0 <- .hull_vol(X)
   if (is.na(v0)) return(rep(NA, nrow(P)))
+  # Fast path: the hull of X is computed once and each point is tested
+  # against its facets (half-space test, signed distance to every facet
+  # <= tol). Points on the boundary (within a relative tolerance of the
+  # extent of the data) are inside, as with the volume criterion below.
+  Xu <- unique(round(X, 10))
+  h <- tryCatch(geometry::convhulln(Xu, options = "Tv", output.options = "n"),
+                error = function(e) NULL)
+  if (!is.null(h) && !is.null(h$normals) && ncol(h$normals) == ncol(X) + 1) {
+    tol <- rel_tol * max(apply(Xu, 2, function(v) diff(range(v))))
+    sd <- cbind(round(P, 10), 1) %*% t(h$normals)
+    return(apply(sd, 1, max) <= tol)
+  }
   vapply(seq_len(nrow(P)), function(i) {
     v1 <- .hull_vol(rbind(X, P[i, , drop = FALSE]))
     if (is.na(v1)) NA else v1 <= v0 * (1 + rel_tol)
@@ -221,14 +233,66 @@ print.fs_nonnative <- function(x, ...) {
 .assemblage_metrics <- function(X, ha, vol_pool) {
   n <- nrow(X)
   if (n < 2) return(c(S = n, FRic = NA, FDis = NA, FOri = NA, MPD = NA))
-  D <- as.matrix(stats::dist(X))
-  diag(D) <- NA
   cen <- colMeans(X)
+  # FOri: nearest-neighbour distances (exact k-NN search, no n x n matrix);
+  # MPD: mean of the n(n-1)/2 pairwise distances (half the memory of the
+  # full matrix; computed by blocks for very large assemblages)
+  nn <- FNN::get.knn(X, k = 1, algorithm = if (ncol(X) > 10) "brute" else "kd_tree")
   c(S = n,
     FRic = .hull_vol(X[, seq_len(ha), drop = FALSE]) / vol_pool,
     FDis = mean(sqrt(rowSums(sweep(X, 2, cen)^2))),
-    FOri = mean(apply(D, 1, min, na.rm = TRUE)),
-    MPD = mean(D, na.rm = TRUE))
+    FOri = mean(nn$nn.dist[, 1]),
+    MPD = .mean_pairwise_dist(X))
+}
+
+## Internal: "permute" null model. The current assemblage is the same in
+## every replicate and the historical one is the current minus a random set R
+## of species: its distance matrix is computed once, and MPD and FOri of each
+## replicate are updated from it (MPD: sums of distances minus the rows of R;
+## FOri: nearest neighbours recomputed only for species whose nearest
+## neighbour is in R). Same values as .assemblage_metrics(), without
+## recomputing O(n^2) distances in every replicate.
+.permute_cache <- function(Xc) {
+  D <- as.matrix(stats::dist(Xc))
+  rs <- rowSums(D)
+  diag(D) <- Inf
+  list(D = D, rs = rs, S = sum(rs), nn = max.col(-D, ties.method = "first"))
+}
+.permute_metrics <- function(pc, R, Xh, ha, vol_pool) {
+  n <- nrow(pc$D); h <- n - length(R)
+  if (h < 2) return(.assemblage_metrics(Xh, ha, vol_pool))
+  keep <- rep(TRUE, n); keep[R] <- FALSE
+  dRR <- pc$D[R, R, drop = FALSE]; diag(dRR) <- 0
+  mpd <- (pc$S - 2 * sum(pc$rs[R]) + sum(dRR)) / (h * (h - 1))
+  idx <- which(keep)
+  nnd <- pc$D[cbind(idx, pc$nn[idx])]
+  lost <- !keep[pc$nn[idx]]                         # nearest neighbour removed
+  if (any(lost)) {
+    sub <- pc$D[idx[lost], idx, drop = FALSE]
+    nnd[lost] <- sub[cbind(seq_len(nrow(sub)), max.col(-sub, ties.method = "first"))]
+  }
+  cen <- colMeans(Xh)
+  c(S = h,
+    FRic = .hull_vol(Xh[, seq_len(ha), drop = FALSE]) / vol_pool,
+    FDis = mean(sqrt(rowSums(sweep(Xh, 2, cen)^2))),
+    FOri = mean(nnd),
+    MPD = mpd)
+}
+
+## Internal: mean Euclidean distance between all pairs of rows of X
+.mean_pairwise_dist <- function(X, max_n = 10000, block = 1000) {
+  n <- nrow(X)
+  if (n <= max_n) return(mean(stats::dist(X)))
+  tot <- 0
+  for (s in seq(1, n - 1, by = block)) {
+    i <- s:min(s + block - 1, n)
+    j <- (s + 1):n
+    D2 <- matrix(0, length(i), length(j))
+    for (c in seq_len(ncol(X))) D2 <- D2 + outer(X[i, c], X[j, c], "-")^2
+    D2[outer(i, j, ">=")] <- 0                     # keep pairs i < j only
+    tot <- tot + sum(sqrt(D2))
+  }
+  tot / (n * (n - 1) / 2)
 }
 
 #' Change in functional structure of assemblages after introductions
@@ -342,6 +406,9 @@ nonnative_assemblage <- function(space, status, comm = NULL, extirpated = NULL,
         warning("Assemblage '", rownames(comm)[j], "': the pool contains no species other than ",
                 "the observed non-native species; the 'pool' null model is uninformative ",
                 "(supply a wider 'pool' or use null = \"permute\").", call. = FALSE)
+      pcache <- if (null == "permute" && !length(ext) && length(cur) >= 3 &&
+                    length(cur) <= getOption("DisentFunSpaces.max_n_dist_matrix", 10000))
+        .permute_cache(X[cur, , drop = FALSE]) else NULL
       sims <- replicate(nrep, {
         if (null == "pool") {
           if (length(cand) < length(nn)) return(rep(NA_real_, length(dnames)))
@@ -354,8 +421,11 @@ nonnative_assemblage <- function(space, status, comm = NULL, extirpated = NULL,
           cur_r <- cur
           hist_r <- c(setdiff(cur, fake_nn), ext)
         }
-        .assemblage_metrics(X[cur_r, , drop = FALSE], ha, vol_pool) -
+        m_cur <- if (null == "permute") mc else .assemblage_metrics(X[cur_r, , drop = FALSE], ha, vol_pool)
+        m_hist <- if (null == "pool") mh else if (!is.null(pcache))
+          .permute_metrics(pcache, match(fake_nn, cur), X[hist_r, , drop = FALSE], ha, vol_pool) else
           .assemblage_metrics(X[hist_r, , drop = FALSE], ha, vol_pool)
+        m_cur - m_hist
       })
       sims <- matrix(sims, nrow = length(dnames), dimnames = list(dnames, NULL))
       for (m in dnames[-1]) {

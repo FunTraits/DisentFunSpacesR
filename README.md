@@ -107,6 +107,42 @@ combinations) — 5. Procrustes comparisons and species residuals — 6. Species
 metrics — 7. Non-native species — 8. Export (tables, R objects, trait-information CSV and an R script
 reproducing the analysis).
 
+### Large datasets
+
+From 1000 species the app uses large-data settings by default ("Performance"
+panel of tab 4), which give the same results as the published analysis:
+
+* distances computed with the fast engine (same values as
+  `ade4::dist.ktab()`, which needs more than 6 GB of RAM for 8,413 species);
+* partial PCoA (package `RSpectra`): only the positive-eigenvalue axes (or
+  the "Max. PCoA axes" set) are computed, without the full
+  eigendecomposition; same coordinates (up to sign) and inertia; negative
+  eigenvalues are not reported;
+* Procrustes permutations on several CPU cores (macOS / Linux, when many
+  axes are compared), with identical p-values;
+* text files read with `data.table::fread()`; uploads up to 1 GB.
+
+Timings for the 8,413 bird species (2-core virtual machine, reference BLAS):
+
+| Step | Before (0.5.1) | Now (0.6.0) |
+|---|---|---|
+| Distances, `dist.ktab()` (app default before) | out of memory (> 6 GB) | — |
+| Distances, fast engine, Combined space | 41 s | 32 s |
+| PCoA, Combined space (23 positive axes) | 11 min | 5 s |
+| Non-native analysis, 1 space, 9 null replicates | 225 s | 4 s |
+
+```r
+install.packages(c("RSpectra", "data.table"))   # recommended for large data
+DisentFunSpaces::run_app()
+```
+
+In scripts: `build_spaces(traits, engine = "fast", eigen = "partial")`.
+
+PCoA and Procrustes tests rely on matrix algebra: an optimised BLAS
+(Accelerate on macOS, see the *R for macOS FAQ*; OpenBLAS on Linux) makes
+them several times faster. The app shows a hint when R uses its reference
+BLAS.
+
 ## Notes
 
 * Default settings reproduce the published analysis (all positive PCoA axes,

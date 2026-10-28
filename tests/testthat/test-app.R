@@ -73,3 +73,34 @@ test_that("app loads the full 8,413-species example with its trait table", {
     expect_equal(data_name(), "birds_traits_all.csv")
   })
 })
+
+test_that("app uses the large-data settings (fast engine, partial PCoA, cores)", {
+  skip_if_not_installed("RSpectra")
+  op <- options(DisentFunSpaces.app_large_n = 100); on.exit(options(op))
+  shiny::testServer(DisentFunSpaces:::app_server, {
+    session$setInputs(src = "example", species_col = "species", iucn_col = "iucn", sep = ",")
+    session$setInputs(validate = 1)
+    session$setInputs(missing = "drop", run_missing = 1)
+    session$setInputs(spaces_sel = c("Diet", "Locomotion", "Combined"), weighting = "variable",
+                      correction = "none", max_axes = 6, engine = "auto", eigen_mode = "partial",
+                      run_spaces = 1)
+    expect_true(isTRUE(rv$spaces$Combined$PCoA$partial))
+    expect_equal(ncol(rv$spaces$Combined$coords), 6)
+    expect_equal(rv$build_settings$engine, "ade4")       # < 1000 species
+    # all positive axes with the partial decomposition = full decomposition
+    session$setInputs(max_axes = NA, eigen_mode = "partial", run_spaces = 2)
+    pa <- rv$spaces$Locomotion
+    session$setInputs(eigen_mode = "full", run_spaces = 3)
+    fu <- rv$spaces$Locomotion
+    expect_equal(ncol(pa$coords), ncol(fu$coords))
+    expect_equal(abs(unname(pa$coords)), abs(unname(fu$coords)), tolerance = 1e-8)
+    session$setInputs(eigen_mode = "partial", max_axes = 6, run_spaces = 4)
+    session$setInputs(pr_method = "ade4", nrepet = 19, axes_mode = "all", mantel = FALSE,
+                      cores = 2, run_compare = 1)
+    expect_equal(nrow(rv$cmp$table), 3)
+    session$setInputs(k_nn = 5, n_phylo = 10, ntree = 100, seed = 1)
+    scr <- analysis_script(script_params())
+    expect_match(scr, 'eigen = "partial"', fixed = TRUE)
+    expect_silent(parse(text = scr))
+  })
+})

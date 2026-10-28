@@ -22,7 +22,15 @@
 #'   `"lingoes"`.
 #' @param max_axes Number of PCoA axes kept in `coords` (`NULL`, default as
 #'   in the original analysis: all positive-eigenvalue axes). The full
-#'   `ape::pcoa()` output is always kept in `PCoA`.
+#'   `ape::pcoa()` output is kept in `PCoA`, unless `eigen = "partial"`.
+#' @param eigen `"full"` (default): complete eigendecomposition, as in the
+#'   original analysis. `"partial"` (without correction, package 'RSpectra'
+#'   installed): only the axes kept are computed, i.e. the first `max_axes`
+#'   axes or, with `max_axes = NULL`, all positive-eigenvalue axes (see
+#'   [PCoAGraph()]): same coordinates (signs of axes are arbitrary) and
+#'   relative inertia, seconds instead of about ten minutes per space for
+#'   8,413 bird species; `PCoA` then holds these axes only and the
+#'   negative-eigenvalue diagnostics are `NA`.
 #' @param envfit_perm,envfit_axes Passed to [PCoAGraph()].
 #' @param n_cor_axes Number of axes kept in the tidy correlation table
 #'   `cor` (`PCoACor` keeps all axes).
@@ -61,11 +69,12 @@ build_space <- function(x, dimensions = NULL, name = NULL,
                         correction = c("none", "cailliez", "lingoes"),
                         max_axes = NULL, envfit_perm = 999, envfit_axes = c(1, 2),
                         n_cor_axes = 10, keep_dist = NULL, saveFile = NA,
-                        engine = c("ade4", "fast")) {
+                        engine = c("ade4", "fast"), eigen = c("full", "partial")) {
   stopifnot(inherits(x, "fs_traits"))
   weighting <- match.arg(weighting)
   correction <- match.arg(correction)
   engine <- match.arg(engine)
+  eigen <- match.arg(eigen)
   if (is.null(dimensions)) dimensions <- unique(x$trait_info$dimension)
   unk <- setdiff(dimensions, x$trait_info$dimension)
   if (length(unk)) stop("Unknown dimension(s): ", paste(unk, collapse = ", "),
@@ -91,7 +100,8 @@ build_space <- function(x, dimensions = NULL, name = NULL,
   }
   res <- PCoAGraph(x = bl$x, datax = bl$datax, namesx = x$species, groups = bl$groups,
                    saveFile = saveFile, correction = correction,
-                   envfit_perm = envfit_perm, envfit_axes = envfit_axes, dist = d)
+                   envfit_perm = envfit_perm, envfit_axes = envfit_axes, dist = d,
+                   partial = eigen == "partial", n_axes = max_axes)
 
   pc <- res$PCoA
   vals <- pc$values
@@ -105,8 +115,9 @@ build_space <- function(x, dimensions = NULL, name = NULL,
   eigen_tab <- data.frame(axis = colnames(vec), eigenvalue = eig[keep],
                           relative = rel[keep], cumulative = cumsum(rel[keep]))
   negv <- vals$Eigenvalues[vals$Eigenvalues < -sqrt(.Machine$double.eps)]
-  neg <- list(n = length(negv),
-              ratio = if (length(negv)) sum(abs(negv)) / sum(vals$Eigenvalues[vals$Eigenvalues > 0]) else 0)
+  neg <- if (isTRUE(pc$partial)) list(n = NA_integer_, ratio = NA_real_) else
+    list(n = length(negv),
+         ratio = if (length(negv)) sum(abs(negv)) / sum(vals$Eigenvalues[vals$Eigenvalues > 0]) else 0)
 
   # tidy correlation table (first n_cor_axes axes) with trait metadata
   k <- min(n_cor_axes, ncol(res$PCoACor))

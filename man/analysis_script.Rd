@@ -10,7 +10,8 @@ analysis_script(p)
 \item{p}{Named list of settings (`data_file`, `trait_info_file`,
 `species_col`, `iucn_col`, `sep`, `missing`, `phylo_file`,
 `n_phylo_axes`, `ntree`, `cov_cols`, `spaces`, `weighting`, `correction`,
-`method`, `nrepet`, `n_axes`, `mantel`, `k`; optionally `status_col`,
+`method`, `nrepet`, `n_axes`, `mantel`, `k`; optionally `engine`,
+`eigen`, `keep_dist`, `cores` (large datasets), `status_col`,
 `native_label`, `hull_axes` for non-native species).}
 }
 \value{

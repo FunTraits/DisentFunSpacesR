@@ -13,7 +13,9 @@ PCoAGraph(
   correction = "none",
   envfit_perm = 999,
   envfit_axes = c(1, 2),
-  dist = NULL
+  dist = NULL,
+  partial = FALSE,
+  n_axes = NULL
 )
 }
 \arguments{
@@ -44,6 +46,20 @@ first two).}
 
 \item{dist}{Optional precomputed `dist` object; if supplied, `x` and
 `groups` are only used for `PCoACor`.}
+
+\item{partial}{Use a partial eigendecomposition (Lanczos algorithm,
+package 'RSpectra') instead of a full one, without correction only:
+much faster for several thousand species. With `n_axes = NULL`, all
+positive-eigenvalue axes are computed, as with [ape::pcoa()] (the
+number of axes is doubled from 50 until a non-positive eigenvalue is
+reached; beyond 500 positive axes, `options(DisentFunSpaces.partial_k_max)`,
+the full decomposition is used). Same coordinates (signs of axes are
+arbitrary) and relative inertia as the full decomposition; the
+broken-stick values and negative-eigenvalue diagnostics are not
+available.}
+
+\item{n_axes}{With `partial = TRUE`, number of axes computed (`NULL`:
+all positive-eigenvalue axes).}
 }
 \value{
 A list with `PCoA` (output of [ape::pcoa()], with species as row

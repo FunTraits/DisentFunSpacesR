@@ -16,7 +16,8 @@ build_space(
   n_cor_axes = 10,
   keep_dist = NULL,
   saveFile = NA,
-  engine = c("ade4", "fast")
+  engine = c("ade4", "fast"),
+  eigen = c("full", "partial")
 )
 }
 \arguments{
@@ -36,7 +37,7 @@ all).}
 
 \item{max_axes}{Number of PCoA axes kept in `coords` (`NULL`, default as
 in the original analysis: all positive-eigenvalue axes). The full
-`ape::pcoa()` output is always kept in `PCoA`.}
+`ape::pcoa()` output is kept in `PCoA`, unless `eigen = "partial"`.}
 
 \item{envfit_perm, envfit_axes}{Passed to [PCoAGraph()].}
 
@@ -55,6 +56,15 @@ the published analysis) or `"fast"` (same values, see
 [trait_distance()]; much lower memory use for several thousand species
 with missing values in multichoice traits, where `dist.ktab()` builds
 many n x n matrices). The PCoA always uses [PCoAGraph()].}
+
+\item{eigen}{`"full"` (default): complete eigendecomposition, as in the
+original analysis. `"partial"` (without correction, package 'RSpectra'
+installed): only the axes kept are computed, i.e. the first `max_axes`
+axes or, with `max_axes = NULL`, all positive-eigenvalue axes (see
+[PCoAGraph()]): same coordinates (signs of axes are arbitrary) and
+relative inertia, seconds instead of about ten minutes per space for
+8,413 bird species; `PCoA` then holds these axes only and the
+negative-eigenvalue diagnostics are `NA`.}
 }
 \value{
 An object of class `fs_space`, a list holding the

@@ -65,3 +65,72 @@
   class(out) <- "pcoa"
   out
 }
+
+# Partial principal coordinates analysis --------------------------------------
+# Leading principal coordinates only, from the same Gower-centred matrix as
+# ape::pcoa(), computed with the Lanczos solver of RSpectra (exact leading
+# eigenpairs, to numerical precision) instead of a full eigendecomposition
+# (O(n^3)): seconds instead of about ten minutes per space for ~8,000
+# species. The trace (sum of all eigenvalues) is computed exactly, so the
+# relative inertia of the axes is the same as with ape::pcoa(); the
+# broken-stick model and the diagnostics of negative eigenvalues, which need
+# the whole spectrum, are not available (NA). Signs of axes are arbitrary, as
+# with any eigensolver.
+#  * k = number of axes: the first k positive-eigenvalue axes;
+#  * k = NULL: ALL positive-eigenvalue axes (as ape::pcoa), found by
+#    computing 50 axes, then 100, 200... until a non-positive eigenvalue is
+#    reached. Fails (error) beyond `k_max` positive axes, in which case the
+#    caller falls back to the full decomposition. Gower distances of
+#    continuous and fuzzy-coded traits without missing values are Euclidean
+#    with about one positive axis per trait column, so that this is fast for
+#    many trait datasets.
+# Used by PCoAGraph(partial = TRUE) when 'RSpectra' is installed.
+.pcoa_partial <- function(D, k = NULL,
+                          k_max = getOption("DisentFunSpaces.partial_k_max", 500)) {
+  names <- labels(D)
+  D <- as.matrix(D)
+  n <- nrow(D)
+  eps <- sqrt(.Machine$double.eps)
+  D <- D * D
+  D <- D * -0.5
+  rm <- rowMeans(D)
+  gm <- mean(rm)
+  D <- D - rm
+  for (j in seq_len(n)) D[, j] <- D[, j] - (rm[j] - gm)
+  trace <- sum(diag(D))
+  solve_k <- function(kk) {
+    e <- RSpectra::eigs_sym(D, k = kk, which = "LA", opts = list(maxitr = 5000, retvec = TRUE))
+    if (is.null(e$nconv) || e$nconv < kk) stop("RSpectra did not converge.", call. = FALSE)
+    o <- order(e$values, decreasing = TRUE)
+    list(values = e$values[o], vectors = e$vectors[, o, drop = FALSE])
+  }
+  cap <- min(as.integer(k_max), floor(n / 4))
+  if (is.null(k)) {
+    kk <- min(50L, cap)
+    repeat {
+      e <- solve_k(kk)
+      if (min(e$values) <= eps) break                 # all positive axes found
+      if (kk >= cap) stop("More than ", cap, " positive eigenvalues.", call. = FALSE)
+      kk <- min(2L * kk, cap)
+    }
+  } else {
+    e <- solve_k(min(as.integer(k), n - 2L))
+  }
+  rm(D); invisible(gc(verbose = FALSE))
+  pos <- e$values > eps
+  eig <- e$values[pos]
+  vectors <- sweep(e$vectors[, pos, drop = FALSE], 2, sqrt(eig), FUN = "*")
+  rel.eig <- eig / trace
+  res <- data.frame(Eigenvalues = eig, Relative_eig = rel.eig, Broken_stick = NA_real_,
+                    Cumul_eig = cumsum(rel.eig), Cumul_br_stick = NA_real_)
+  rownames(res) <- seq_len(nrow(res))
+  rownames(vectors) <- names
+  colnames(vectors) <- paste0("Axis.", seq_len(ncol(vectors)))
+  out <- list(correction = c("none", 1),
+              note = if (is.null(k))
+                sprintf("Partial eigendecomposition (RSpectra): all %d positive axes", length(eig)) else
+                sprintf("Partial eigendecomposition (RSpectra): first %d axes", length(eig)),
+              values = res, vectors = vectors, trace = trace, partial = TRUE)
+  class(out) <- "pcoa"
+  out
+}

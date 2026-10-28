@@ -5,7 +5,7 @@
 \alias{fs_app}
 \title{Launch the DisentFunSpaces Shiny application}
 \usage{
-run_app(launch.browser = TRUE, max_upload_mb = 200, ...)
+run_app(launch.browser = TRUE, max_upload_mb = 1000, ...)
 
 fs_app()
 }
@@ -27,6 +27,19 @@ and functional dimension of each trait, handle missing values, build the
 functional spaces, compare them with Procrustes tests and compute
 species-level metrics. Results, the trait-information table and an R
 script reproducing the analysis can be downloaded.
+}
+\details{
+Large datasets: from 1000 species the app uses, by default
+  ("Performance" panel of tab 4), the fast distance engine (same values as
+  `ade4::dist.ktab()`, much less memory) and a partial eigendecomposition
+  (package 'RSpectra') that computes only the axes kept - by default all
+  positive-eigenvalue axes, as in the published analysis. From 3000
+  species (`options(DisentFunSpaces.app_large_n)`) the app shows memory
+  estimates and advice. Text files are read with
+  `data.table::fread()` when installed. Procrustes permutations can use
+  several cores (macOS / Linux) without changing the results. Computations
+  on matrices (PCoA, Procrustes) are much faster with an optimised BLAS
+  (e.g. Accelerate on macOS, OpenBLAS on Linux).
 }
 \examples{
 if (interactive()) run_app()

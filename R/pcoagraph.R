@@ -38,6 +38,18 @@
 #'   first two).
 #' @param dist Optional precomputed `dist` object; if supplied, `x` and
 #'   `groups` are only used for `PCoACor`.
+#' @param partial Use a partial eigendecomposition (Lanczos algorithm,
+#'   package 'RSpectra') instead of a full one, without correction only:
+#'   much faster for several thousand species. With `n_axes = NULL`, all
+#'   positive-eigenvalue axes are computed, as with [ape::pcoa()] (the
+#'   number of axes is doubled from 50 until a non-positive eigenvalue is
+#'   reached; beyond 500 positive axes, `options(DisentFunSpaces.partial_k_max)`,
+#'   the full decomposition is used). Same coordinates (signs of axes are
+#'   arbitrary) and relative inertia as the full decomposition; the
+#'   broken-stick values and negative-eigenvalue diagnostics are not
+#'   available.
+#' @param n_axes With `partial = TRUE`, number of axes computed (`NULL`:
+#'   all positive-eigenvalue axes).
 #'
 #' @return A list with `PCoA` (output of [ape::pcoa()], with species as row
 #'   names of `vectors`), `varPlot` (envfit vector scores and a `Species`
@@ -57,7 +69,7 @@
 #' res$PCoACor[, 1:3]
 PCoAGraph <- function(x, datax, namesx, groups, saveFile = NA,
                       correction = "none", envfit_perm = 999, envfit_axes = c(1, 2),
-                      dist = NULL) {
+                      dist = NULL, partial = FALSE, n_axes = NULL) {
   # --- Checks ---
   if (!is.list(x) || !all(vapply(x, is.data.frame, logical(1L)))) {
     stop("Argument 'x' must be a list of data frames.")
@@ -89,10 +101,26 @@ PCoAGraph <- function(x, datax, namesx, groups, saveFile = NA,
 
   # --- Run PCoA ---
   lean_n <- getOption("DisentFunSpaces.lean_pcoa_n", 3000)
-  PCoATraits <- if (identical(correction, "none") && length(namesx) >= lean_n) {
-    .pcoa_lean(disTraits)        # same result as ape::pcoa, less memory
-  } else {
-    ape::pcoa(disTraits, correction = correction)
+  nsp <- length(namesx)
+  PCoATraits <- NULL
+  if (isTRUE(partial) && identical(correction, "none") && nsp >= 50 &&
+      (is.null(n_axes) || n_axes < nsp / 2)) {
+    if (requireNamespace("RSpectra", quietly = TRUE)) {
+      PCoATraits <- tryCatch(.pcoa_partial(disTraits, n_axes), error = function(e) {
+        message("Partial eigendecomposition not used (", conditionMessage(e),
+                "): full decomposition.")
+        NULL
+      })
+    } else {
+      message("Install 'RSpectra' for the partial eigendecomposition: full decomposition used.")
+    }
+  }
+  if (is.null(PCoATraits)) {
+    PCoATraits <- if (identical(correction, "none") && nsp >= lean_n) {
+      .pcoa_lean(disTraits)        # same result as ape::pcoa, less memory
+    } else {
+      ape::pcoa(disTraits, correction = correction)
+    }
   }
   rownames(PCoATraits$vectors) <- namesx
   if (!is.null(PCoATraits$vectors.cor)) rownames(PCoATraits$vectors.cor) <- namesx
@@ -133,18 +161,30 @@ CorrelType <- function(pcoa, type) {
   type <- as.data.frame(type)
   Axis <- matrix(NA_real_, ncol = ncol(vec), nrow = ncol(type),
                  dimnames = list(colnames(type), colnames(vec)))
+  # Vectorised over axes (same values as one cor() / lm() call per trait x
+  # axis, which is prohibitive with thousands of species and axes).
   for (i in seq_len(ncol(type))) {
     v <- type[[i]]
-    for (tr in seq_len(ncol(vec))) {
-      y <- vec[, tr]
-      Axis[i, tr] <- if (is.factor(v) || is.character(v)) {
-        v <- factor(v); ok <- !is.na(v)
-        if (nlevels(droplevels(v[ok])) < 2) NA_real_ else
-          sqrt(summary(stats::lm(y[ok] ~ v[ok]))$r.squared)
-      } else {
-        if (isTRUE(stats::sd(v, na.rm = TRUE) > 0))
-          stats::cor(y, v, use = "pairwise.complete.obs") else NA_real_
-      }
+    if (is.factor(v) || is.character(v)) {
+      v <- factor(v); ok <- !is.na(v)
+      g <- droplevels(v[ok])
+      if (nlevels(g) < 2) next
+      # correlation ratio eta = sqrt(R2 of y ~ factor) = sqrt(SS_between / SS_total)
+      Y <- vec[ok, , drop = FALSE]
+      mu <- colMeans(Y)
+      Yc <- sweep(Y, 2, mu)
+      sst <- colSums(Yc^2)
+      ng <- tabulate(as.integer(g), nlevels(g))
+      gm <- rowsum(Yc, g, reorder = TRUE) / ng      # group means (centred)
+      ssb <- colSums(gm^2 * ng)
+      r2 <- ssb / sst
+      r2[!is.finite(r2)] <- NA_real_
+      Axis[i, ] <- sqrt(pmin(pmax(r2, 0), 1))
+    } else {
+      v <- as.numeric(v)
+      if (!isTRUE(stats::sd(v, na.rm = TRUE) > 0)) next
+      ok <- !is.na(v)
+      Axis[i, ] <- suppressWarnings(stats::cor(vec[ok, , drop = FALSE], v[ok]))[, 1]
     }
   }
   Axis

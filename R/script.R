@@ -7,7 +7,8 @@
 #' @param p Named list of settings (`data_file`, `trait_info_file`,
 #'   `species_col`, `iucn_col`, `sep`, `missing`, `phylo_file`,
 #'   `n_phylo_axes`, `ntree`, `cov_cols`, `spaces`, `weighting`, `correction`,
-#'   `method`, `nrepet`, `n_axes`, `mantel`, `k`; optionally `status_col`,
+#'   `method`, `nrepet`, `n_axes`, `mantel`, `k`; optionally `engine`,
+#'   `eigen`, `keep_dist`, `cores` (large datasets), `status_col`,
 #'   `native_label`, `hull_axes` for non-native species).
 #' @return A character string.
 #' @export
@@ -76,13 +77,17 @@ traits
 spaces <- build_spaces(traits,
   spaces = ', spaces_code, ',
   weighting = "', p$weighting, '", correction = "', p$correction, '",
-  max_axes = ', if (is.null(p$max_axes)) "NULL" else p$max_axes, ')
+  max_axes = ', if (is.null(p$max_axes)) "NULL" else p$max_axes,
+  if (!is.null(p$engine) && p$engine != "ade4") paste0(', engine = "', p$engine, '"') else '',
+  if (!is.null(p$eigen) && p$eigen != "full") paste0(', eigen = "', p$eigen, '"') else '',
+  if (isFALSE(p$keep_dist)) ', keep_dist = FALSE' else '', ')
 spaces
 lapply(spaces, plot_space)
 
 ## 4. Comparison of spaces (Procrustes tests)
 cmp <- compare_spaces(spaces, n_axes = ', nax, ', method = "', p$method, '",
-                      nrepet = ', p$nrepet, ', mantel = ', p$mantel, ')
+                      nrepet = ', p$nrepet, ', mantel = ', p$mantel,
+  if (!is.null(p$cores) && p$cores > 1) paste0(', cores = ', p$cores) else '', ')
 cmp
 plot_comparison(cmp)
 

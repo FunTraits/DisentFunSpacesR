@@ -21,6 +21,17 @@
 #' @param mantel Logical; also run Mantel tests (Pearson) between distances.
 #' @param seed Random seed.
 #' @param progress Optional function `progress(i, n, label)`.
+#' @param cores Number of CPU cores used for the permutations of
+#'   `method = "ade4"` (forked processes, Unix/macOS only; ignored on
+#'   Windows), when at least 50 axes are compared (below that, forking costs
+#'   more than it saves). Results do not depend
+#'   on `cores`: the permutations are drawn beforehand, in the same order as
+#'   `ade4::procuste.rtest()`.
+#'
+#' @details With `method = "ade4"` the test is an exact re-implementation of
+#'   [ade4::procuste.rtest()] (same statistic, same random permutations for a
+#'   given seed, hence the same p-values) that computes singular values only,
+#'   which is several times faster when many axes are used.
 #'
 #' @return An object of class `fs_comparison`: `table` (one row per pair:
 #'   `space1`, `space2`, `n_species`, `n_axes`, `r` Procrustes correlation,
@@ -34,7 +45,8 @@
 #' cmp <- compare_spaces(spaces, nrepet = 99)
 #' cmp
 compare_spaces <- function(spaces, n_axes = NULL, method = c("ade4", "vegan"),
-                           nrepet = 999, mantel = FALSE, seed = 1, progress = NULL) {
+                           nrepet = 999, mantel = FALSE, seed = 1, progress = NULL,
+                           cores = 1) {
   method <- match.arg(method)
   if (length(spaces) < 2) stop("At least two spaces are needed.")
   nm <- names(spaces)
@@ -46,7 +58,7 @@ compare_spaces <- function(spaces, n_axes = NULL, method = c("ade4", "vegan"),
     if (!is.null(progress)) progress(i, length(pairs), paste(pairs[[i]], collapse = " vs "))
     al <- .align(a, b, n_axes)
     if (method == "ade4") {
-      tst <- ade4::procuste.rtest(as.data.frame(al$X), as.data.frame(al$Y), nrepet = nrepet)
+      tst <- .procuste_rtest(al$X, al$Y, nrepet = nrepet, cores = cores)
       r <- tst$obs; p <- tst$pvalue; m2 <- NA_real_
     } else {
       tst <- vegan::protest(al$X, al$Y, permutations = nrepet, symmetric = TRUE)
@@ -78,6 +90,36 @@ compare_spaces <- function(spaces, n_axes = NULL, method = c("ade4", "vegan"),
                  settings = list(method = method, nrepet = nrepet,
                                  n_axes = if (is.null(n_axes)) "all" else n_axes)),
             class = "fs_comparison")
+}
+
+# Exact re-implementation of ade4::procuste.rtest() (ade4 1.7): same
+# centring/scaling, statistic sum(singular values of X'Y), and permutations
+# drawn with sample(n) one after the other, as in ade4, so that results are
+# identical for a given seed. Faster: singular values only (svd(nu = 0,
+# nv = 0)), crossprod(), optional forked parallelism over permutations.
+.procuste_rtest <- function(X, Y, nrepet = 999, cores = 1) {
+  X <- scale(as.matrix(X), scale = FALSE)
+  Y <- scale(as.matrix(Y), scale = FALSE)
+  X <- X / sqrt(sum(apply(X, 2, function(x) sum(x^2))))
+  Y <- Y / sqrt(sum(apply(Y, 2, function(x) sum(x^2))))
+  attr(X, "scaled:center") <- attr(Y, "scaled:center") <- NULL
+  stat <- function(Yp) sum(svd(crossprod(X, Yp), nu = 0, nv = 0)$d)
+  obs <- stat(Y)
+  if (nrepet == 0) return(list(obs = obs, pvalue = NA_real_))
+  n <- nrow(X)
+  cores <- max(1L, as.integer(cores))
+  # forking only pays off when each SVD is costly (many axes)
+  big <- min(ncol(X), ncol(Y)) >= getOption("DisentFunSpaces.parallel_min_axes", 50)
+  if (cores > 1L && big && .Platform$OS.type == "unix") {
+    perms <- lapply(seq_len(nrepet), function(i) sample(n))
+    chunks <- split(seq_len(nrepet), cut(seq_len(nrepet), min(cores * 4L, nrepet), labels = FALSE))
+    sim <- unlist(parallel::mclapply(chunks, function(ii)
+      vapply(ii, function(i) stat(Y[perms[[i]], , drop = FALSE]), numeric(1)),
+      mc.cores = cores), use.names = FALSE)
+  } else {
+    sim <- vapply(seq_len(nrepet), function(i) stat(Y[sample(n), , drop = FALSE]), numeric(1))
+  }
+  ade4::as.randtest(obs = obs, sim = sim)
 }
 
 .align <- function(a, b, n_axes = NULL) {

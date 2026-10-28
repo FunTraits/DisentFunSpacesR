@@ -1,7 +1,7 @@
 Package: DisentFunSpaces
 Type: Package
 Title: Build and Compare Functional Spaces from Mixed-Type Trait Data
-Version: 0.5.1
+Version: 0.6.0
 Authors@R: c(
     person("Aurèle", "Toussaint", email = "aurele.toussaint@cnrs.fr",
            role = c("aut", "cre")),
@@ -30,9 +30,9 @@ License: GPL (>= 3)
 Encoding: UTF-8
 Depends: R (>= 4.1)
 Imports: ade4, ape, vegan, FNN, geometry, MASS, grDevices, ggplot2, shiny, bslib,
-        DT, stats, utils
-Suggests: missForest, knitr, patchwork, rmarkdown, readxl, testthat (>=
-        3.0.0)
+        DT, parallel, stats, utils
+Suggests: missForest, knitr, patchwork, rmarkdown, readxl, RSpectra,
+        data.table, testthat (>= 3.0.0)
 Config/testthat/edition: 3
 LazyData: true
 VignetteBuilder: knitr
