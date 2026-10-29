@@ -28,7 +28,10 @@ Description: Generalises the framework of Toussaint et al. (2026, Ecography,
     al. 2014, <doi:10.1890/13-1917.1>) and the Amniote life-history database
     (Myhrvold et al. 2015, <doi:10.1890/15-0846R.1>).
 License: GPL (>= 3)
+Copyright: See inst/COPYRIGHTS for the fonts (IBM Plex, SIL Open Font
+    License 1.1) and the sources of the example data.
 Encoding: UTF-8
+Language: en-GB
 Depends: R (>= 4.1)
 Imports: ade4, ape, vegan, FNN, geometry, MASS, grDevices, ggplot2, shiny, bslib,
         DT, htmltools, parallel, stats, utils
@@ -37,8 +40,8 @@ Suggests: missForest, knitr, patchwork, rmarkdown, readxl, RSpectra, callr, zip,
 Config/testthat/edition: 3
 LazyData: true
 VignetteBuilder: knitr
-RoxygenNote: 7.3.1
 URL: https://github.com/FunTraits/DisentFunSpacesR
 BugReports: https://github.com/FunTraits/DisentFunSpacesR/issues
 NeedsCompilation: no
 Maintainer: Aurèle Toussaint <aurele.toussaint@cnrs.fr>
+Config/roxygen2/version: 8.0.0

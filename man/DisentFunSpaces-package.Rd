@@ -29,14 +29,19 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Aur<U+00E8>le Toussaint \email{aurele.toussaint@cnrs.fr}
+\strong{Maintainer}: Aurèle Toussaint \email{aurele.toussaint@cnrs.fr}
+
+Authors:
+\itemize{
+  \item Aurèle Toussaint \email{aurele.toussaint@cnrs.fr}
+}
 
 Other contributors:
 \itemize{
   \item Pablo Tedesco [contributor]
-  \item Ga<U+00EB>l Grenouillet [contributor]
+  \item Gaël Grenouillet [contributor]
   \item Liis Kasari-Toussaint [contributor]
-  \item S<U+00E9>bastien Brosse [contributor]
+  \item Sébastien Brosse [contributor]
 }
 
 }

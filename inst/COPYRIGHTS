@@ -1,0 +1,18 @@
+DisentFunSpaces includes third-party material:
+
+Fonts: inst/app/www/fonts/*.woff2
+  IBM Plex Sans and IBM Plex Sans Condensed (subsets, WOFF2 format)
+  Copyright IBM Corp. (see the notice at the top of OFL.txt)
+  Licensed under the SIL Open Font License, Version 1.1
+  (full text: inst/app/www/fonts/OFL.txt; https://openfontlicense.org).
+  Used only to display the Shiny application offline.
+
+Example data: data/birds_traits*.rda, data/birds_tree.rda
+  Derived from AVONET (Tobias et al. 2022, Ecology Letters,
+  doi:10.1111/ele.13898), EltonTraits 1.0 (Wilman et al. 2014,
+  Ecology, doi:10.1890/13-1917.1) and the Amniote life-history database
+  (Myhrvold et al. 2015, Ecology, doi:10.1890/15-0846R.1), as compiled in
+  Toussaint et al. (2026, Ecography, doi:10.1002/ecog.08578). The
+  phylogeny is pruned from Jetz et al. (2012, Nature,
+  doi:10.1038/nature11631), as distributed by the megatrees R package.
+  See ?birds_traits and ?birds_tree.

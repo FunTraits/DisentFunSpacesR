@@ -46,7 +46,7 @@ impute missing values; archived as `data/raw/phylogeny.tre`.}
 
 \item{steps}{Optional analyses included after the spaces: any of
 `"compare"` (Procrustes tests), `"metrics"` (FUn, FSp, FUSE) and
-`"nonnative"`.}
+`"nonnative"` (none: `character(0)`).}
 
 \item{title, author}{Title and author(s), used in the README and report.}
 
