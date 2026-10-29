@@ -16,7 +16,8 @@ species, and a 'shiny' application.
 * local: macOS (aarch64), R-release: devtools::check(args = "--as-cran")
 * win-builder, R-release: R 4.6.1 (2026-06-24 ucrt), Windows Server 2022 x64:
   Status: 1 NOTE (new submission; possibly misspelled words are proper names)
-* win-builder, R-devel: devtools::check_win_devel()
+* win-builder, R-devel: R Under development (unstable) (2026-10-28 r90783 ucrt),
+  Windows Server 2022 x64: Status: 1 NOTE (new submission; possibly misspelled words)
 * macOS builder: devtools::check_mac_release()
 
 ## R CMD check results
@@ -27,9 +28,11 @@ species, and a 'shiny' application.
   Maintainer: 'Aurèle Toussaint <aurele.toussaint@cnrs.fr>'
   New submission.
 
-  Possibly misspelled words in DESCRIPTION are proper names (AVONET,
-  EltonTraits, Amniote, Ecography, Procrustes) or technical terms (PCoA,
-  FUn, FSp, FUSE).
+  Possibly misspelled words in DESCRIPTION are author names (Gower, Pavoine,
+  Tobias, Wilman, Myhrvold, Toussaint; "et al."), names of databases and of a
+  journal (AVONET, EltonTraits, Amniote, Ecography), metric abbreviations
+  (FUn: functional uniqueness, FSp: functional specialisation) and the trait
+  type "multichoice" (several categories recorded per species).
 
 ## Notes for CRAN
 
