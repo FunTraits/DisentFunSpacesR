@@ -25,7 +25,8 @@
 #' @examples
 #' if (interactive()) run_app()
 run_app <- function(launch.browser = TRUE, max_upload_mb = 1000, ...) {
-  options(shiny.maxRequestSize = max_upload_mb * 1024^2)
+  old <- options(shiny.maxRequestSize = max_upload_mb * 1024^2)
+  on.exit(options(old), add = TRUE)
   shiny::runApp(fs_app(), launch.browser = launch.browser, ...)
 }
 

@@ -13,6 +13,11 @@ compare_nonnative(x, metric = "FNov", top = 0.1)
 
 \item{top}{Proportion of species defining the top set.}
 }
+\value{
+A list, as [compare_metrics()]: `pairs` (data frame: `space1`,
+  `space2`, `spearman`, `jaccard_top`, `n_shared_top`), `top_sets`
+  (species of the top set of each space), `top_info`, `metric` and `top`.
+}
 \description{
 Wrapper around [compare_metrics()] for non-native species metrics
 (`"FNov"`, `"FSp_native"`, `"FUSI"`) or native losses (`"dFUn_rel"`,

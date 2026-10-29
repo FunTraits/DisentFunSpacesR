@@ -544,6 +544,9 @@ summary_nonnative <- function(x) {
 #' @param x Output of [nonnative_all()].
 #' @param metric Metric to compare.
 #' @param top Proportion of species defining the top set.
+#' @return A list, as [compare_metrics()]: `pairs` (data frame: `space1`,
+#'   `space2`, `spearman`, `jaccard_top`, `n_shared_top`), `top_sets`
+#'   (species of the top set of each space), `top_info`, `metric` and `top`.
 #' @export
 compare_nonnative <- function(x, metric = "FNov", top = 0.1) {
   if (metric == "dFUn_rel") {

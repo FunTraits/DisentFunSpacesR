@@ -181,6 +181,7 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     Sys.setenv(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep))
     on.exit(if (is.na(old)) Sys.unsetenv("R_LIBS") else Sys.setenv(R_LIBS = old), add = TRUE)
     owd <- setwd(out$dir)
+    on.exit(setwd(owd), add = TRUE)
     status <- tryCatch(suppressWarnings(system2(rs, c("--no-save", "--no-restore", "run_all.R"),
                                                 stdout = log, stderr = log)),
                        error = function(e) { cat(conditionMessage(e), file = log, append = TRUE); 1L })
@@ -198,11 +199,12 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
   if (zip) {
     zf <- paste0(out$dir, ".zip")
     if (file.exists(zf)) unlink(zf)
-    owd <- setwd(dirname(out$dir))
+    owd2 <- setwd(dirname(out$dir))
+    on.exit(setwd(owd2), add = TRUE)
     files <- list.files(project, recursive = TRUE, all.files = TRUE, full.names = TRUE)
     if (requireNamespace("zip", quietly = TRUE)) zip::zip(zf, files) else
       utils::zip(zf, files, flags = "-r9Xq")
-    setwd(owd)
+    setwd(owd2)
     out$zip <- zf
     say("Project archive: ", zf)
   }
