@@ -104,3 +104,32 @@ test_that("app uses the large-data settings (fast engine, partial PCoA, cores)",
     expect_silent(parse(text = scr))
   })
 })
+
+test_that("app home page and export tab follow the session", {
+  shiny::testServer(DisentFunSpaces:::app_server, {
+    session$setInputs(src = "example", species_col = "species", iucn_col = "iucn", sep = ",")
+    expect_equal(which(steps_done()), 1L)
+    expect_equal(next_step(), 2L)
+    session$setInputs(validate = 1)
+    session$setInputs(missing = "drop", run_missing = 1)
+    session$setInputs(spaces_sel = c("Diet", "Locomotion", "Combined"), weighting = "variable",
+                      correction = "none", run_spaces = 1)
+    session$setInputs(pr_method = "ade4", nrepet = 19, axes_mode = "all", mantel = FALSE, run_compare = 1)
+    expect_equal(which(steps_done()), 1:5)
+    expect_equal(prj_steps(), "compare")
+    session$setInputs(k_nn = 5, n_phylo = 10, ntree = 100, seed = 1, top = 0.1,
+                      prj_title = "My analysis", prj_author = "Me", prj_name = "my project!")
+    expect_equal(prj_name(), "my_project_")
+    p <- prj_params()
+    expect_equal(p$nrepet, 19)
+    pr <- write_analysis_project(raw(), current_ti(), file.path(tempfile(), prj_name()), params = p,
+                                 steps = prj_steps(), title = "My analysis", run = FALSE,
+                                 zip = FALSE, quiet = TRUE)
+    s <- list.files(file.path(pr$dir, "scripts"))
+    expect_true("04_ANALYSIS_compare_spaces.R" %in% s)
+    expect_false("05_ANALYSIS_species_metrics.R" %in% s)
+    e <- new.env(); sys.source(file.path(pr$dir, "utils/parameters.R"), envir = e)
+    expect_named(e$PARAMS$spaces, c("Diet", "Locomotion", "Combined"))
+    expect_equal(e$PARAMS$missing, "drop")
+  })
+})

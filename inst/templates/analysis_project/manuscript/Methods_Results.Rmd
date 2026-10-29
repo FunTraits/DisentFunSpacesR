@@ -1,0 +1,229 @@
+---
+title: "{{TITLE}}"
+subtitle: "Methods and Results -- functional spaces"
+author: "{{AUTHOR}}"
+date: "{{DATE}}"
+output:
+  word_document: default
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.width = 6.5, fig.height = 5, dpi = 150)
+knitr::opts_knit$set(root.dir = normalizePath(".."))
+```
+
+```{r load}
+source("utils/parameters.R")
+tab <- function(name) {
+  f <- file.path("results", "tables", paste0(name, ".csv"))
+  if (file.exists(f)) utils::read.csv(f, check.names = FALSE, stringsAsFactors = FALSE)
+}
+fig <- function(name) {
+  f <- file.path("results", "figures", paste0(name, ".png"))
+  if (file.exists(f)) normalizePath(f)
+}
+kable3 <- function(x, ...) {
+  num <- vapply(x, is.numeric, logical(1))
+  x[num] <- lapply(x[num], function(v) signif(v, 3))
+  knitr::kable(x, row.names = FALSE, ...)
+}
+lst <- function(x) {
+  x <- as.character(x)
+  if (length(x) < 2) return(x)
+  paste(paste(x[-length(x)], collapse = ", "), "and", x[length(x)])
+}
+P <- PARAMS
+t1 <- tab("Table1_traits"); t2 <- tab("Table2_spaces"); s1 <- tab("TableS1_missing_values")
+t3 <- tab("Table3_procrustes"); t4 <- tab("Table4_metric_congruence")
+t5 <- tab("Table5_nonnative_summary"); ie <- tab("TableS2_imputation_error")
+n_sp <- if (!is.null(s1)) s1$n_species_analysed[1] else NA
+dims <- unique(t1$dimension)
+types <- c(Q = "continuous", O = "ordinal", N = "nominal", B = "multichoice",
+           F = "fuzzy-coded", C = "circular", D = "binary")
+type_tab <- table(t1$type)
+type_txt <- lst(sprintf("%d %s", as.integer(type_tab),
+                        ifelse(is.na(types[names(type_tab)]), names(type_tab), types[names(type_tab)])))
+weighting_txt <- switch(P$weighting,
+  variable = "each trait contributing equally to the distance, whatever its dimension (as in Toussaint et al. 2026)",
+  dimension = "each functional dimension contributing equally to the distance",
+  dimension_scaled = "each functional dimension contributing equally to the distance, after rescaling the distance of each dimension so that trait types are balanced",
+  P$weighting)
+tr <- t1$transform %in% setdiff(unique(t1$transform), c("none", NA))
+txt_transform <- if (any(tr)) {
+  by_tr <- split(t1$trait[tr], t1$transform[tr])
+  sprintf("Continuous traits were transformed before analysis (%s).",
+          paste(sprintf("%s: %s", names(by_tr), vapply(by_tr, lst, "")), collapse = "; "))
+} else ""
+one_dim <- vapply(P$spaces, length, 1L) == 1
+txt_spaces <- paste0(
+  if (any(one_dim)) sprintf("a functional space was built for each of the %d functional dimension%s",
+                            sum(one_dim), if (sum(one_dim) > 1) "s" else "") else "",
+  if (any(one_dim) && any(!one_dim)) " and " else "",
+  if (any(!one_dim)) sprintf("%s for %s (%s)", if (any(one_dim)) "one" else "a functional space was built",
+    if (sum(!one_dim) > 1) sprintf("each of %d combinations of dimensions", sum(!one_dim)) else "a combination of dimensions",
+    paste(sprintf("%s: %s", names(P$spaces)[!one_dim],
+                  vapply(P$spaces[!one_dim], paste, "", collapse = " + ")), collapse = "; ")) else "")
+txt_missing <- switch(P$missing,
+  keep = paste("Missing values were kept: the generalised Gower distance between two species",
+               "was computed from the traits known for both (Pavoine et al. 2009)."),
+  drop = "Species with at least one missing trait value were removed.",
+  impute = sprintf(paste("Missing trait values were imputed with random forests (missForest;",
+                         "Stekhoven & Bühlmann 2012; %d trees per forest), using the other traits%s%s",
+                         "as predictors. Out-of-bag imputation errors are given in Table S2."),
+                   P$ntree,
+                   if (length(P$cov_cols)) sprintf(", %d additional predictor column(s) (%s)",
+                                                   length(P$cov_cols), lst(P$cov_cols)) else "",
+                   if (!is.null(P$phylo_file)) sprintf(" and the first %d phylogenetic eigenvectors",
+                                                      P$n_phylo_axes) else ""))
+txt_correction <- if (P$correction == "none") "without correction for negative eigenvalues" else
+  sprintf("with the %s correction for negative eigenvalues", tools::toTitleCase(P$correction))
+txt_axes <- if (is.null(P$max_axes)) "all axes with a positive eigenvalue were kept" else
+  sprintf("the first %d axes were kept", P$max_axes)
+txt_quality <- if (!is.null(fig("FigS2_quality"))) paste("The quality of each space was assessed with",
+  "the mean absolute deviation between initial distances and distances in the space",
+  "(mAD; Maire et al. 2015; Fig. S2).") else ""
+txt_cmp <- if (!is.null(t3)) sprintf(paste("**Comparison of spaces.** Spaces were compared pairwise",
+  "with Procrustes analyses on the species they share (%s, %d permutations; Peres-Neto & Jackson",
+  "2001), using %s.%s"),
+  if (P$method == "ade4") "ade4::procuste.rtest" else "symmetric vegan::protest", P$nrepet,
+  if (is.null(P$n_axes)) "all PCoA axes" else sprintf("the first %d PCoA axes", P$n_axes),
+  if (isTRUE(P$mantel)) " Mantel tests (Pearson) between distance matrices were added." else "") else ""
+txt_metrics <- if (!is.null(tab("TableS5_species_metrics"))) sprintf(paste(
+  "**Species-level metrics.** In each space, functional uniqueness (FUn) was measured as the sum",
+  "of the Euclidean distances of a species to its %d nearest neighbours, and functional",
+  "specialisation (FSp) as its distance to the centroid of the space (Mouillot et al. 2013);",
+  "both were rescaled to [0, 1] within each space.%s The congruence of species rankings between",
+  "spaces was measured with Spearman correlations and with the overlap (Jaccard index) of the",
+  "%g%% most distinct species."), P$k,
+  if (!is.null(P$iucn_col)) paste(" FUSE was computed as log(1 + P x FSp + P x FUn), with P the",
+    "extinction probability of the IUCN category of the species (EDGE2; Gumbs et al. 2023),",
+    "following Pimiento et al. (2020).") else "", 100 * P$top) else ""
+nn <- P$nonnative
+txt_nn <- if (!is.null(t5)) sprintf(paste("**Non-native species.** %s In each space, the functional",
+  "novelty (FNov) of a non-native species was measured as its distance to the nearest native",
+  "species, and its position was compared to the convex hull of native species (first %d axes).",
+  "For native species, the relative change in FUn once non-native species are added was computed,",
+  "and for the whole fauna the change in functional richness, dispersion, originality and mean",
+  "pairwise distance%s."),
+  if (identical(nn$source, "simulate")) sprintf(paste("Introductions were simulated for exploration:",
+    "%g%% of the species were given a non-native status, with a %s bias in the %s space."),
+    100 * nn$prop, nn$bias, nn$sim_space) else
+    sprintf("Species status was read from the column '%s' ('%s' = native).", P$status_col, nn$native),
+  nn$hull_axes,
+  if (!identical(nn$null, "none")) sprintf(", compared to %d null replicates (%s)", nn$nrep, nn$null) else "") else ""
+```
+
+# Methods
+
+**Data.** The analysis covers `r format(n_sp, big.mark = ",")` species described by
+`r nrow(t1)` traits (`r type_txt`) assigned to `r length(dims)` functional
+dimension`r if (length(dims) > 1) "s" else ""` (`r lst(dims)`; Table 1).
+`r txt_transform`
+
+**Missing values.** `r txt_missing`
+The percentage of missing values per trait before and after this step is given in Table S1.
+
+**Functional spaces.** Following Toussaint et al. (2026), `r txt_spaces`.
+Distances between species were computed with the generalised Gower distance
+(Pavoine et al. 2009; `ade4::dist.ktab`, Dray & Dufour 2007), with one table per
+dimension and trait type, `r weighting_txt`. Each distance matrix was ordinated
+with a Principal Coordinates Analysis (PCoA; `ape::pcoa`, Paradis & Schliep 2019)
+`r txt_correction`,
+and `r txt_axes`.
+`r txt_quality`
+
+`r txt_cmp`
+
+`r txt_metrics`
+
+`r txt_nn`
+
+All analyses were run in R with the package DisentFunSpaces ({{DFS_VERSION}};
+Toussaint et al. 2026); versions of R and packages are listed in `session_info.txt`.
+
+# Results
+
+```{r spaces-text, results = "asis"}
+if (!is.null(t2)) {
+  best <- t2[which.max(t2$cum4_pct), ]
+  cat(sprintf(paste0("The first four PCoA axes explained between %.1f%% and %.1f%% of the inertia ",
+                     "of the spaces (Table 2), the most in the %s space."),
+              min(t2$cum4_pct), max(t2$cum4_pct), best$space), "\n\n")
+}
+if (!is.null(t3)) {
+  cat(sprintf(paste0("Procrustes correlations between spaces ranged from %.2f (%s vs %s) to %.2f ",
+                     "(%s vs %s) (Table 3, Fig. 2)."),
+              min(t3$r), t3$space1[which.min(t3$r)], t3$space2[which.min(t3$r)],
+              max(t3$r), t3$space1[which.max(t3$r)], t3$space2[which.max(t3$r)]), "\n\n")
+}
+if (!is.null(t4)) {
+  f <- t4[t4$metric == "FUn", ]
+  if (nrow(f)) cat(sprintf(paste0("Spearman correlations between the rankings of species by functional ",
+                                  "uniqueness in two spaces ranged from %.2f to %.2f (Table 4)."),
+                           min(f$spearman), max(f$spearman)), "\n\n")
+}
+```
+
+**Table 1.** Traits, functional dimensions and types.
+
+```{r t1}
+kable3(t1)
+```
+
+**Table 2.** Functional spaces: number of species and variables, inertia of the first PCoA axes (%).
+
+```{r t2}
+if (!is.null(t2)) kable3(t2)
+```
+
+```{r t3, results = "asis"}
+if (!is.null(t3)) {
+  cat("**Table 3.** Pairwise Procrustes tests between spaces.\n\n")
+  print(kable3(t3))
+}
+```
+
+```{r t4, results = "asis"}
+if (!is.null(t4)) {
+  cat("\n\n**Table 4.** Congruence of species rankings between spaces.\n\n")
+  print(kable3(t4))
+}
+```
+
+```{r t5, results = "asis"}
+if (!is.null(t5)) {
+  cat("\n\n**Table 5.** Non-native species in each space (medians).\n\n")
+  print(kable3(t5))
+}
+```
+
+```{r figs, results = "asis"}
+figs <- list.files(file.path("results", "figures"), pattern = "^Fig[0-9].*\\.png$")
+for (f in figs) {
+  cat("\n\n**", sub("\\.png$", "", f), "**\n\n", sep = "")
+  cat(sprintf("![](%s){width=90%%}\n\n", normalizePath(file.path("results", "figures", f))))
+}
+```
+
+# References
+
+Dray S., Dufour A.-B. (2007) The ade4 package: implementing the duality diagram for ecologists. *Journal of Statistical Software* 22(4): 1--20.
+
+Gumbs R. et al. (2023) The EDGE2 protocol: advancing the prioritisation of Evolutionarily Distinct and Globally Endangered species for practical conservation action. *PLoS Biology* 21: e3001991.
+
+Maire E., Grenouillet G., Brosse S., Villéger S. (2015) How many dimensions are needed to accurately assess functional diversity? A pragmatic approach for assessing the quality of functional spaces. *Global Ecology and Biogeography* 24: 728--740.
+
+Mouillot D. et al. (2013) Rare species support vulnerable functions in high-diversity ecosystems. *PLoS Biology* 11: e1001569.
+
+Paradis E., Schliep K. (2019) ape 5.0: an environment for modern phylogenetics and evolutionary analyses in R. *Bioinformatics* 35: 526--528.
+
+Pavoine S., Vallet J., Dufour A.-B., Gachet S., Daniel H. (2009) On the challenge of treating various types of variables: application for improving the measurement of functional diversity. *Oikos* 118: 391--402.
+
+Peres-Neto P.R., Jackson D.A. (2001) How well do multivariate data sets match? The advantages of a Procrustean superimposition approach over the Mantel test. *Oecologia* 129: 169--178.
+
+Pimiento C. et al. (2020) Functional diversity of marine megafauna in the Anthropocene. *Science Advances* 6: eaay7650.
+
+Stekhoven D.J., Bühlmann P. (2012) MissForest -- non-parametric missing value imputation for mixed-type data. *Bioinformatics* 28: 112--118.
+
+Toussaint A., Tedesco P., Grenouillet G., Kasari-Toussaint L., Brosse S. (2026) Disentangling functional spaces: a multidimensional framework for ecology and conservation. *Ecography* e08578. doi:10.1002/ecog.08578

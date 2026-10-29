@@ -1,3 +1,29 @@
+# DisentFunSpaces 0.7.0
+
+## Shiny application
+
+* New look, shared with the other FunTraits applications (intraitR,
+  Rfishmorph): white header and cards on a pale page, IBM Plex Sans shipped
+  with the package (works offline), numbered steps in the header that turn
+  green once done, and a "Help" menu.
+* New home page: what the framework does, the eight steps of the workflow
+  (click to open one; done / next / optional), a summary of the session and
+  the citation.
+* Export tab rebuilt: it now writes a **reproducible project** (see
+  `write_analysis_project()`), runs its scripts in a background R process
+  (package 'callr', when installed: the app stays usable) and offers one
+  `.zip`. The tab previews the project before it is built (architecture,
+  README, `parameters.R`) and shows the run log and the Methods & Results
+  report once it has run. The single files remain available.
+
+## Functions
+
+* `write_analysis_project()`: writes an analysis as a research repository
+  (`scripts/` numbered by step, `utils/parameters.R` with every setting,
+  `data/raw`, `data/processed`, `results/figures`, `results/tables`,
+  `manuscript/Methods_Results.Rmd`, `run_all.R`, `.Rproj`, `README.md`,
+  `data/metadata.csv`, `session_info.txt`), runs it and zips it.
+
 # DisentFunSpaces 0.6.0
 
 Faster computations and a Shiny application for large datasets. All the

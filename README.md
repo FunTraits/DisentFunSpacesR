@@ -100,12 +100,41 @@ A trait-information template can be generated with
 DisentFunSpaces::run_app()
 ```
 
-Tabs: 1. Data (CSV/TSV/Excel or the bird example) — 2. Traits (type,
-dimension, block, transformation, weight, ordinal levels, circular limits) —
-3. Missing values — 4. Functional spaces (per dimension, combined, custom
-combinations) — 5. Procrustes comparisons and species residuals — 6. Species
-metrics — 7. Non-native species — 8. Export (tables, R objects, trait-information CSV and an R script
-reproducing the analysis).
+A home page shows the workflow and how far the session has gone. Tabs:
+1. Data (CSV/TSV/Excel or the bird example) — 2. Traits (type, dimension,
+block, transformation, weight, ordinal levels, circular limits) — 3. Missing
+values — 4. Functional spaces (per dimension, combined, custom combinations) —
+5. Procrustes comparisons and species residuals — 6. Species metrics —
+7. Non-native species — 8. Export.
+
+### Export: a reproducible project
+
+The Export tab does not save what is on screen: it writes the analysis as a
+self-contained project with the settings of the tabs, **runs** its own
+scripts in a separate R session, and zips it, so that the archive is what
+anyone re-running it obtains. The same from the console:
+
+```r
+write_analysis_project(birds_traits, birds_trait_info, dir = "~/birds_spaces",
+                       params = list(iucn_col = "iucn", missing = "drop"),
+                       steps = c("compare", "metrics"),
+                       title = "Functional spaces of birds", author = "A. Toussaint")
+```
+
+```text
+birds_spaces/
+├── scripts/      01_DATA_prepare_traits.R, 02_DATA_missing_values.R,
+│                 03_ANALYSIS_functional_spaces.R, 04_ANALYSIS_compare_spaces.R,
+│                 05_ANALYSIS_species_metrics.R, 06_ANALYSIS_nonnative.R
+├── utils/        library.R, parameters.R (every setting, in one place), functions.R
+├── data/         raw/ (traits.csv, trait_info.csv, phylogeny.tre), processed/, metadata.csv
+├── results/      figures/ (Fig*, FigS*: .png + .pdf), tables/ (Table*, TableS*: .csv)
+├── manuscript/   Methods_Results.Rmd (+ .docx): Methods and Results with references
+├── run_all.R, birds_spaces.Rproj, README.md, session_info.txt, .gitignore
+```
+
+Single files (CSV tables, R objects, a one-file R script) can still be
+downloaded from the same tab.
 
 ### Large datasets
 

@@ -63,6 +63,30 @@ run_app <- function(launch.browser = TRUE, max_upload_mb = 1000, ...) {
 #' @export
 fs_app <- function() shiny::shinyApp(ui = app_ui(), server = app_server)
 
+# Small UI helpers ------------------------------------------------------------
+.card_x <- function(title, ...) bslib::card(fill = FALSE, bslib::card_header(title),
+                                            bslib::card_body(..., fillable = FALSE))
+.CITATION_TEXT <- paste(
+  "Toussaint A., Tedesco P., Grenouillet G., Kasari-Toussaint L., Brosse S. (2026)",
+  "Disentangling functional spaces: a multidimensional framework for ecology and",
+  "conservation. Ecography e08578. doi:10.1002/ecog.08578")
+# the steps of the workflow: tab value, label, what it does
+.APP_STEPS <- data.frame(
+  tab = c("1. Data", "2. Traits", "3. Missing values", "4. Functional spaces",
+          "5. Compare spaces", "6. Species metrics", "7. Non-native species", "8. Export"),
+  label = c("Data", "Traits", "Missing values", "Functional spaces", "Compare spaces",
+            "Species metrics", "Non-native species", "Export"),
+  what = c("A trait table: one row per species, one column per trait (or per modality).",
+           "The type and the functional dimension of each trait.",
+           "Keep them (pairwise Gower distance), drop incomplete species, or impute them.",
+           "One space per dimension and per combination: generalised Gower distance + PCoA.",
+           "Procrustes tests: do the dimensions place species alike?",
+           "Functional uniqueness, specialisation and FUSE in every space.",
+           "Novelty of non-native species and their effect on the native fauna (optional).",
+           "A reproducible project: data, scripts, results and report in one .zip."),
+  optional = c(FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE, FALSE),
+  stringsAsFactors = FALSE)
+
 # ---------------------------------------------------------------------------
 # UI
 # ---------------------------------------------------------------------------
@@ -71,23 +95,63 @@ app_ui <- function() {
   type_choices <- stats::setNames(trait_types()$code,
                                   paste0(trait_types()$code, " - ", trait_types()$label))
   bslib::page_navbar(
-    title = "DisentFunSpaces",
+    title = sh$span(.brand_mark(), "DisentFunSpaces"),
     id = "nav",
-    bg = "#1F4E79",
-    inverse = TRUE,
-    theme = bslib::bs_theme(version = 5, primary = "#1F4E79",
-                            base_font = bslib::font_collection("system-ui", "-apple-system",
-                                                               "Segoe UI", "sans-serif")),
-    header = sh$style(shiny::HTML("
-      .ti-table td, .ti-table th {padding: 2px 6px; vertical-align: middle; font-size: 0.85rem;}
-      .ti-table .form-group {margin-bottom: 0;}
-      .ti-table select, .ti-table input {font-size: 0.85rem; padding: 2px 4px; height: 30px;}
-      .ti-table th {position: sticky; top: 0; background: #f4f6f8; z-index: 2;}
-      .step-help {color: #555; font-size: 0.9rem;}
-      .shiny-notification {font-size: 0.9rem;}")),
+    bg = "#ffffff",
+    selected = "home",
+    theme = .app_theme(),
+    fillable = FALSE,
+    window_title = "DisentFunSpaces",
+    header = .app_deps(),
+
+    # HOME ----------------------------------------------------------------------
+    bslib::nav_panel("Home", value = "home",
+      sh$div(class = "home-hero",
+        sh$div(
+          sh$div(class = "home-kicker", "Toussaint et al. 2026 \u00b7 Ecography"),
+          sh$h1("Disentangling functional spaces"),
+          sh$p(class = "home-lead",
+            "Build one functional space per functional dimension of your traits (locomotion,",
+            " diet, reproduction...) and for their combinations, compare them with Procrustes",
+            " tests, and find the species that are functionally unique, specialised or",
+            " endangered in each. Any mixed-type trait table: continuous, ordinal, nominal,",
+            " binary, multichoice, fuzzy-coded or circular traits."),
+          shiny::uiOutput("home_state"),
+          sh$div(class = "home-actions",
+            shiny::actionButton("home_example", "Start with the example: 2,000 bird species",
+                                class = "btn-primary"),
+            shiny::actionButton("home_upload", "Upload a trait table"),
+            shiny::uiOutput("home_next", inline = TRUE))),
+        sh$div(.home_art_svg())),
+      bslib::layout_columns(col_widths = c(7, 5), fill = FALSE, style = "align-items: start;",
+        sh$div(class = "home-col",
+          .card_x("Workflow", shiny::uiOutput("home_steps"))),
+        sh$div(class = "home-col",
+          .card_x("This session", shiny::uiOutput("home_stats")),
+          .card_x("From the R console",
+            sh$div(class = "home-code", sh$pre(paste(
+              "library(DisentFunSpaces)",
+              "tr <- prepare_traits(birds_traits, birds_trait_info, \"species\")",
+              "spaces <- build_spaces(drop_incomplete(tr))",
+              "compare_spaces(spaces)",
+              "",
+              "# the whole analysis as a reproducible project",
+              "write_analysis_project(birds_traits, birds_trait_info,",
+              "  dir = \"~/birds_spaces\", params = list(missing = \"drop\"))",
+              sep = "\n"))),
+            sh$p(class = "hint", "Every tab calls these package functions; the Export tab writes",
+                 " them into a project that runs on its own.")),
+          .card_x("Citation",
+            sh$p(class = "home-cite", .CITATION_TEXT),
+            sh$p(class = "hint", sh$a("doi:10.1002/ecog.08578", href = "https://doi.org/10.1002/ecog.08578",
+                                      target = "_blank"), " \u00b7 ",
+                 sh$a("Code and data of the paper", href = "https://github.com/FunTraits/DisentFunSpaces",
+                      target = "_blank"))))
+      )
+    ),
 
     # 1. DATA -----------------------------------------------------------------
-    bslib::nav_panel("1. Data",
+    bslib::nav_panel(.step_title(1, "Data"), value = "1. Data",
       bslib::layout_sidebar(
         sidebar = bslib::sidebar(width = 320,
           shiny::radioButtons("src", "Data source",
@@ -118,7 +182,7 @@ app_ui <- function() {
     ),
 
     # 2. TRAITS ---------------------------------------------------------------
-    bslib::nav_panel("2. Traits",
+    bslib::nav_panel(.step_title(2, "Traits"), value = "2. Traits",
       bslib::layout_sidebar(
         sidebar = bslib::sidebar(width = 320,
           shiny::actionButton("guess", "Guess trait types", class = "btn-outline-primary w-100"),
@@ -148,7 +212,7 @@ app_ui <- function() {
     ),
 
     # 3. MISSING --------------------------------------------------------------
-    bslib::nav_panel("3. Missing values",
+    bslib::nav_panel(.step_title(3, "Missing"), value = "3. Missing values",
       bslib::layout_sidebar(
         sidebar = bslib::sidebar(width = 320,
           shiny::radioButtons("missing", "Handling of missing values", c(
@@ -176,7 +240,7 @@ app_ui <- function() {
     ),
 
     # 4. SPACES ---------------------------------------------------------------
-    bslib::nav_panel("4. Functional spaces",
+    bslib::nav_panel(.step_title(4, "Spaces"), value = "4. Functional spaces",
       bslib::layout_sidebar(
         sidebar = bslib::sidebar(width = 330,
           shiny::checkboxGroupInput("spaces_sel", "Spaces to build", choices = NULL),
@@ -234,7 +298,7 @@ app_ui <- function() {
     ),
 
     # 5. PROCRUSTES -----------------------------------------------------------
-    bslib::nav_panel("5. Compare spaces",
+    bslib::nav_panel(.step_title(5, "Compare"), value = "5. Compare spaces",
       bslib::layout_sidebar(
         sidebar = bslib::sidebar(width = 320,
           shiny::radioButtons("pr_method", "Procrustes test", c(
@@ -268,7 +332,7 @@ app_ui <- function() {
     ),
 
     # 6. METRICS --------------------------------------------------------------
-    bslib::nav_panel("6. Species metrics",
+    bslib::nav_panel(.step_title(6, "Metrics"), value = "6. Species metrics",
       bslib::layout_sidebar(
         sidebar = bslib::sidebar(width = 320,
           shiny::numericInput("k_nn", "k nearest neighbours (FUn)", 5, 1, 50),
@@ -294,7 +358,7 @@ app_ui <- function() {
     ),
 
     # 7. NON-NATIVE SPECIES ----------------------------------------------------
-    bslib::nav_panel("7. Non-native species",
+    bslib::nav_panel(.step_title(7, "Non-natives"), value = "7. Non-native species",
       bslib::layout_sidebar(
         sidebar = bslib::sidebar(width = 320,
           shiny::radioButtons("nn_src", "Species status",
@@ -339,29 +403,57 @@ app_ui <- function() {
     ),
 
     # 8. EXPORT ---------------------------------------------------------------
-    bslib::nav_panel("8. Export",
-      bslib::card(
-        bslib::card_header("Download results"),
-        sh$p("Every table can also be copied from its own tab. The R script reproduces the",
-             " analysis with the package functions, using the trait-information CSV."),
-        bslib::layout_column_wrap(width = 1 / 3,
-          shiny::downloadButton("dl_script", "R script (.R)"),
-          shiny::downloadButton("dl_ti2", "Trait information (.csv)"),
-          shiny::downloadButton("dl_coords", "PCoA coordinates (.csv)"),
-          shiny::downloadButton("dl_cmp", "Procrustes table (.csv)"),
-          shiny::downloadButton("dl_metrics", "Species metrics (.csv)"),
-          shiny::downloadButton("dl_nonnative", "Non-native analysis (.csv)"),
-          shiny::downloadButton("dl_rds", "All R objects (.rds)")),
-        shiny::hr(),
-        sh$p(class = "step-help",
-          "Please cite: Toussaint A., Tedesco P., Grenouillet G., Kasari-Toussaint L., Brosse S. (2026)",
-          " Disentangling functional spaces: a multidimensional framework for ecology and conservation.",
-          " Ecography e08578. doi:10.1002/ecog.08578"),
-        shiny::verbatimTextOutput("script_preview")
+    bslib::nav_panel(.step_title(8, "Export"), value = "8. Export",
+      bslib::layout_columns(col_widths = c(4, 8), fill = FALSE, style = "align-items: start;",
+        sh$div(class = "home-col",
+          .card_x("Reproducible project (.zip)",
+            shiny::textInput("prj_title", "Title", "Functional spaces analysis", width = "100%"),
+            shiny::textInput("prj_author", "Author(s)", "", width = "100%"),
+            shiny::textInput("prj_name", "Project (folder) name",
+                             paste0("DisentFunSpaces_", format(Sys.Date(), "%Y%m%d")), width = "100%"),
+            sh$label(class = "form-label", "Analyses included (those run in the tabs)"),
+            shiny::uiOutput("prj_steps"),
+            shiny::checkboxInput("prj_run", "Run the project's scripts before zipping (recommended)", TRUE),
+            shiny::uiOutput("prj_run_hint"),
+            shiny::textInput("prj_save_dir", "Also save the .zip in this folder (optional)", "",
+                             placeholder = "/path/to/folder", width = "100%"),
+            sh$p(class = "hint",
+              "The project is written with the settings of the tabs, then its own scripts are RUN",
+              " (run_all.R, in a separate R session): tables, figures and the Methods & Results",
+              " report come from them, so the archive reproduces itself."),
+            shiny::actionButton("prj_build", "Build the project", class = "btn-primary w-100"),
+            shiny::uiOutput("prj_status"),
+            shiny::uiOutput("prj_dl_ui")),
+          .card_x("Individual files",
+            sh$p(class = "hint", "Quick downloads of what is on screen; the project above holds",
+                 " all of them, with the code that produced them."),
+            sh$div(class = "d-grid gap-2 export-files",
+              shiny::downloadButton("dl_script", "Single R script (.R)", class = "btn-sm"),
+              shiny::downloadButton("dl_ti2", "Trait information (.csv)", class = "btn-sm"),
+              shiny::downloadButton("dl_coords", "PCoA coordinates (.csv)", class = "btn-sm"),
+              shiny::downloadButton("dl_cmp", "Procrustes tests (.csv)", class = "btn-sm"),
+              shiny::downloadButton("dl_metrics", "Species metrics (.csv)", class = "btn-sm"),
+              shiny::downloadButton("dl_nonnative", "Non-native analysis (.csv)", class = "btn-sm"),
+              shiny::downloadButton("dl_rds", "All R objects (.rds)", class = "btn-sm")))),
+        .card_x("Contents of the project",
+          bslib::navset_underline(id = "prj_tabs",
+            bslib::nav_panel("Architecture", shiny::uiOutput("prj_tree")),
+            bslib::nav_panel("README", shiny::uiOutput("prj_readme")),
+            bslib::nav_panel("Methods & Results", shiny::uiOutput("prj_report")),
+            bslib::nav_panel("parameters.R", shiny::uiOutput("prj_params")),
+            bslib::nav_panel("Single script", shiny::verbatimTextOutput("script_preview")),
+            bslib::nav_panel("Run log", shiny::uiOutput("prj_log"))))
       )
     ),
     bslib::nav_spacer(),
-    bslib::nav_item(sh$a("Paper", href = "https://doi.org/10.1002/ecog.08578", target = "_blank"))
+    bslib::nav_menu(title = "Help", align = "right",
+      bslib::nav_item(sh$a("Package documentation (README)", target = "_blank",
+                           href = "https://github.com/FunTraits/DisentFunSpacesR#readme")),
+      bslib::nav_item(sh$a("The paper (Ecography 2026)", target = "_blank",
+                           href = "https://doi.org/10.1002/ecog.08578")),
+      bslib::nav_item(sh$a("Report a problem", target = "_blank",
+                           href = "https://github.com/FunTraits/DisentFunSpacesR/issues"))),
+    bslib::nav_item(sh$span(class = "version", paste0("v", utils::packageVersion("DisentFunSpaces"))))
   )
 }
 
@@ -952,4 +1044,256 @@ app_server <- function(input, output, session) {
     content = function(file) saveRDS(list(trait_info = current_ti(), traits = traits_used(),
                                           spaces = rv$spaces, comparison = rv$cmp,
                                           metrics = rv$metrics, nonnative = rv$nonnative), file))
+  # ---- home page and progress through the steps ----------------------------
+  shiny::observeEvent(input$go_tab, bslib::nav_select("nav", input$go_tab))
+  shiny::observeEvent(input$home_example, {
+    shiny::updateRadioButtons(session, "src", selected = "example")
+    bslib::nav_select("nav", "1. Data")
+  })
+  shiny::observeEvent(input$home_upload, {
+    shiny::updateRadioButtons(session, "src", selected = "upload")
+    bslib::nav_select("nav", "1. Data")
+  })
+  steps_done <- shiny::reactive({
+    d <- tryCatch(raw(), error = function(e) NULL)
+    c(!is.null(d), !is.null(rv$traits), !is.null(rv$traits_final), !is.null(rv$spaces),
+      !is.null(rv$cmp), !is.null(rv$metrics), !is.null(rv$nonnative),
+      isTRUE(!is.null(rv$prj_result$zip)))
+  })
+  next_step <- shiny::reactive({
+    done <- steps_done()
+    core <- which(!done & !.APP_STEPS$optional)
+    if (length(core)) core[1] else NA_integer_
+  })
+  shiny::observe(session$sendCustomMessage("dfs_steps", list(done = as.list(which(steps_done())))))
+  output$home_state <- shiny::renderUI({
+    done <- steps_done(); d <- tryCatch(raw(), error = function(e) NULL)
+    n_done <- sum(done[!.APP_STEPS$optional])
+    txt <- if (is.null(d)) "No data loaded yet." else
+      sprintf("Data: %s (%s species). %s %s", data_name(), format(nrow(d), big.mark = ","),
+              if (!is.null(rv$spaces)) sprintf("%d functional space%s built.", length(rv$spaces),
+                                               if (length(rv$spaces) > 1) "s" else "")
+              else sprintf("Next: %s.", tolower(.APP_STEPS$label[next_step()])),
+              if (is.na(next_step())) "Project exported." else "")
+    shiny::tagList(
+      shiny::tags$p(class = "home-state", txt),
+      shiny::tags$div(class = "home-progress", title = sprintf("%d of 5 core steps done", n_done),
+                      shiny::tags$div(class = "done", style = sprintf("width:%.0f%%;", 100 * n_done / 5))))
+  })
+  output$home_next <- shiny::renderUI({
+    k <- next_step()
+    if (is.na(k) || k <= 1) return(NULL)
+    shiny::tags$a(class = "btn btn-link", href = "#", `data-go` = .APP_STEPS$tab[k],
+                  paste0("Continue: ", .APP_STEPS$label[k], " \u2192"))
+  })
+  output$home_steps <- shiny::renderUI({
+    done <- steps_done(); k <- next_step(); if (is.na(k)) k <- 0L
+    shiny::tags$ol(class = "home-steps", lapply(seq_len(nrow(.APP_STEPS)), function(i) {
+      cls <- if (done[i]) "done" else if (i == k) "next" else ""
+      st <- if (done[i]) "done" else if (i == k) "next" else if (.APP_STEPS$optional[i]) "optional" else ""
+      shiny::tags$li(class = cls, `data-go` = .APP_STEPS$tab[i], tabindex = 0, role = "link",
+        shiny::tags$span(class = "n", i),
+        shiny::tags$div(shiny::tags$div(class = "t", .APP_STEPS$label[i]),
+                        shiny::tags$p(.APP_STEPS$what[i])),
+        shiny::tags$span(class = "s", st))
+    }))
+  })
+  output$home_stats <- shiny::renderUI({
+    d <- tryCatch(raw(), error = function(e) NULL)
+    tr <- traits_used()
+    stat <- function(v, l) shiny::tags$div(class = "home-stat",
+      shiny::tags$div(class = "v", v), shiny::tags$div(class = "l", l))
+    shiny::tags$div(class = "home-stats",
+      stat(if (is.null(d)) "\u2013" else format(if (is.null(tr)) nrow(d) else length(tr$species),
+                                                big.mark = ","), "species"),
+      stat(if (is.null(tr)) "\u2013" else nrow(trait_summary(tr)), "traits used"),
+      stat(if (is.null(tr)) "\u2013" else length(unique(tr$trait_info$dimension)), "dimensions"),
+      stat(if (is.null(rv$spaces)) "\u2013" else length(rv$spaces), "spaces built"))
+  })
+
+  # ---- 8. reproducible project ----------------------------------------------
+  prj_steps <- shiny::reactive(c(if (!is.null(rv$cmp)) "compare", if (!is.null(rv$metrics)) "metrics",
+                                 if (!is.null(rv$nonnative)) "nonnative"))
+  prj_params <- shiny::reactive({
+    p <- script_params()
+    p$top <- if (is.null(input$top)) 0.1 else input$top
+    p$nonnative <- if (!is.null(rv$nonnative)) list(
+      source = if (identical(input$nn_src, "simulate")) "simulate" else "column",
+      native = rv$nn_native_label, prop = input$nn_prop, bias = input$nn_bias,
+      sim_space = input$nn_sim_space, hull_axes = input$nn_hull_axes,
+      null = input$nn_null, nrep = input$nn_nrep)
+    p
+  })
+  prj_name <- shiny::reactive({
+    nm <- gsub("[^A-Za-z0-9_.-]+", "_", trimws(if (is.null(input$prj_name)) "" else input$prj_name))
+    if (!nzchar(nm)) "DisentFunSpaces_analysis" else nm
+  })
+  prj_phylo <- shiny::reactive(if (identical(input$missing, "impute") && !is.null(input$phylo))
+    input$phylo$datapath else NULL)
+  # a preview of the project (written without running it) for the tabs
+  prev_preview <- NULL
+  prj_preview <- shiny::reactive({
+    shiny::req(rv$spaces)
+    p <- prj_params(); st <- prj_steps(); nm <- prj_name()
+    ti <- current_ti(); d <- raw()
+    if (!is.null(prev_preview)) unlink(prev_preview, recursive = TRUE)
+    prev_preview <<- tempfile("prj_preview_")
+    dir <- file.path(prev_preview, nm)
+    tryCatch(write_analysis_project(d, ti, dir, params = p, phylo = prj_phylo(), steps = st,
+                                    title = input$prj_title, author = input$prj_author,
+                                    data_source = data_name(), run = FALSE, zip = FALSE, quiet = TRUE),
+             error = function(e) { notify_error(e); NULL })
+  }) |> shiny::debounce(800)
+  prj_shown <- shiny::reactive({
+    r <- rv$prj_result
+    if (!is.null(r) && isTRUE(file.exists(r$dir))) r else prj_preview()
+  })
+
+  output$prj_steps <- shiny::renderUI({
+    st <- prj_steps()
+    item <- function(on, label) shiny::tags$li(class = if (on) "on" else "off",
+                                               shiny::tags$span(class = "dot"), label)
+    shiny::tagList(shiny::tags$ul(class = "export-steps",
+      item(!is.null(rv$traits), "Traits and missing values (tabs 2-3)"),
+      item(!is.null(rv$spaces), sprintf("Functional spaces (tab 4)%s",
+                                        if (!is.null(rv$spaces)) sprintf(": %s", paste(names(rv$spaces), collapse = ", ")) else "")),
+      item("compare" %in% st, "Procrustes tests (tab 5)"),
+      item("metrics" %in% st, "Species metrics (tab 6)"),
+      item("nonnative" %in% st, "Non-native species (tab 7)")),
+      if (is.null(rv$spaces)) shiny::tags$p(class = "hint", "Build the spaces (tab 4) first."))
+  })
+  output$prj_run_hint <- shiny::renderUI({
+    if (!isTRUE(input$prj_run)) return(shiny::tags$p(class = "hint",
+      "Not run: the archive holds the data and scripts only; run run_all.R to get the results."))
+    n <- if (!is.null(rv$spaces)) nrow(rv$spaces[[1]]$coords) else 0
+    if (n >= .app_large_n()) shiny::tags$p(class = "hint", sprintf(paste0(
+      "%s species: the run repeats every step of the analysis and can take as long as in the",
+      " tabs (imputation, PCoA, permutations). The app stays usable meanwhile."), format(n, big.mark = ",")))
+  })
+
+  shiny::observeEvent(input$prj_build, {
+    if (is.null(rv$spaces)) {
+      shiny::showNotification("Build the functional spaces (tab 4) first.", type = "warning"); return()
+    }
+    if (!is.null(rv$prj_job) && rv$prj_job$is_alive()) return()
+    base <- tempfile("prj_"); dir.create(base)
+    dir <- file.path(base, prj_name())
+    args <- list(data = raw(), trait_info = current_ti(), dir = dir, params = prj_params(),
+                 phylo = if (!is.null(prj_phylo())) ape::read.tree(prj_phylo()), steps = prj_steps(),
+                 title = input$prj_title, author = input$prj_author, data_source = data_name(),
+                 run = isTRUE(input$prj_run), zip = TRUE, quiet = TRUE)
+    rv$prj_result <- NULL; rv$prj_dir <- dir
+    if (requireNamespace("callr", quietly = TRUE)) {
+      f <- file.path(base, "args.rds"); saveRDS(args, f)
+      rv$prj_job <- callr::r_bg(function(f, libs) {
+        .libPaths(libs)
+        do.call(DisentFunSpaces::write_analysis_project, readRDS(f))
+      }, args = list(f = f, libs = .libPaths()), supervise = TRUE)
+    } else {
+      rv$prj_result <- tryCatch(shiny::withProgress(message = "Building the project...", value = 0.5,
+                                                    do.call(write_analysis_project, args)),
+                                error = function(e) list(ok = FALSE, error = conditionMessage(e)))
+      save_copy(rv$prj_result)
+    }
+  })
+  save_copy <- function(res) {
+    sd <- path.expand(trimws(if (is.null(input$prj_save_dir)) "" else input$prj_save_dir))
+    if (nzchar(sd) && !is.null(res$zip) && dir.exists(sd)) {
+      ok <- file.copy(res$zip, file.path(sd, basename(res$zip)), overwrite = TRUE)
+      if (ok) shiny::showNotification(paste("Saved:", file.path(sd, basename(res$zip))), duration = 10)
+    } else if (nzchar(sd) && !dir.exists(sd)) {
+      shiny::showNotification(paste("Folder not found, .zip not copied:", sd), type = "warning")
+    }
+  }
+  shiny::observe({
+    j <- rv$prj_job; shiny::req(j)
+    if (j$is_alive()) { shiny::invalidateLater(1000); return() }
+    res <- tryCatch(j$get_result(), error = function(e) list(ok = FALSE, error = conditionMessage(e)))
+    shiny::isolate({ rv$prj_job <- NULL; rv$prj_result <- res; save_copy(res) })
+  })
+  output$prj_status <- shiny::renderUI({
+    if (!is.null(rv$prj_job)) {
+      shiny::invalidateLater(1500)
+      log <- file.path(if (is.null(rv$prj_dir)) "" else rv$prj_dir, "results", "run_all.log")
+      last <- if (file.exists(log)) utils::tail(grep("Loading|Done|Report", readLines(log, warn = FALSE),
+                                                     value = TRUE), 1) else "Writing the project..."
+      return(shiny::tags$div(class = "alert alert-info mt-3", shiny::tags$b("Building\u2026 "),
+                             if (length(last)) last else "Running run_all.R..."))
+    }
+    r <- rv$prj_result; if (is.null(r)) return(NULL)
+    if (isTRUE(r$ok)) shiny::tags$div(class = "alert alert-success mt-3",
+      "Project built and run: data, scripts, tables, figures and report are in the archive.")
+    else if (is.na(if (is.null(r$ok)) FALSE else r$ok)) shiny::tags$div(class = "alert alert-secondary mt-3",
+      "Project written (not run): run run_all.R to produce the results.")
+    else shiny::tags$div(class = "alert alert-danger mt-3", shiny::tags$b("The project did not run to the end."),
+      shiny::tags$pre(style = "white-space:pre-wrap;font-size:11px;margin-top:6px;", if (is.null(r$error)) "" else r$error),
+      "The archive still holds the data and scripts: see the Run log tab, or run run_all.R.")
+  })
+  output$prj_dl_ui <- shiny::renderUI({
+    r <- rv$prj_result; shiny::req(r, r$zip, file.exists(r$zip))
+    shiny::tagList(
+      shiny::downloadButton("prj_dl", paste("Download", basename(r$zip)), class = "btn-success w-100 mt-2"),
+      shiny::tags$p(class = "hint mt-1", sprintf("%.1f MB", file.size(r$zip) / 1024^2)))
+  })
+  output$prj_dl <- shiny::downloadHandler(filename = function() basename(rv$prj_result$zip),
+                                          content = function(f) file.copy(rv$prj_result$zip, f))
+
+  hint <- function(...) shiny::tags$p(class = "hint", ...)
+  output$prj_tree <- shiny::renderUI({
+    if (is.null(rv$spaces)) return(hint("Build the spaces (tab 4) to see the project."))
+    r <- prj_shown(); shiny::req(r)
+    shiny::tagList(
+      hint(if (identical(r, rv$prj_result)) "The project as built (with its results)." else
+        "Preview: the project as it will be written; results/ and data/processed/ are filled when it runs."),
+      shiny::tags$div(class = "tree", .project_tree(r$dir)))
+  })
+  md_view <- function(file) {
+    if (!file.exists(file)) return(hint("Not written yet."))
+    html <- tryCatch(markdown_html(file), error = function(e) NULL)
+    if (is.null(html)) return(shiny::tags$pre(paste(readLines(file, warn = FALSE, encoding = "UTF-8"), collapse = "\n")))
+    shiny::tags$div(class = "report", shiny::HTML(html))
+  }
+  markdown_html <- function(file) {
+    if (!requireNamespace("rmarkdown", quietly = TRUE) || !rmarkdown::pandoc_available()) return(NULL)
+    out <- tempfile(fileext = ".html")
+    rmarkdown::pandoc_convert(file, from = "gfm", to = "html", output = out)
+    paste(readLines(out, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
+  }
+  output$prj_readme <- shiny::renderUI({
+    if (is.null(rv$spaces)) return(hint("Build the spaces (tab 4) to see the README."))
+    r <- prj_shown(); shiny::req(r); md_view(file.path(r$dir, "README.md"))
+  })
+  output$prj_params <- shiny::renderUI({
+    if (is.null(rv$spaces)) return(hint("Build the spaces (tab 4) to see the parameters."))
+    r <- prj_shown(); shiny::req(r)
+    shiny::tagList(hint("utils/parameters.R: every setting of the analysis, in one place."),
+      shiny::tags$pre(style = "max-height:560px;overflow:auto;font-size:12px;",
+                      paste(readLines(file.path(r$dir, "utils", "parameters.R"), warn = FALSE,
+                                      encoding = "UTF-8"), collapse = "\n")))
+  })
+  output$prj_report <- shiny::renderUI({
+    r <- rv$prj_result
+    if (is.null(r)) return(hint("Build the project to read the Methods & Results it writes."))
+    docx <- file.path(r$dir, "manuscript", "Methods_Results.docx")
+    if (!file.exists(docx)) return(hint(if (!isTRUE(r$ok))
+      "No report: the project was not run, or stopped before the report (see the Run log tab)." else
+      "No rendered report (pandoc not found): knit manuscript/Methods_Results.Rmd in RStudio."))
+    html <- tempfile(fileext = ".html")
+    ok <- tryCatch({ rmarkdown::pandoc_convert(docx, to = "html", output = html,
+                                               options = c("--embed-resources", "--standalone")); TRUE },
+                   error = function(e) tryCatch({ rmarkdown::pandoc_convert(docx, to = "html", output = html,
+                                                  options = "--self-contained"); TRUE }, error = function(e) FALSE))
+    if (!ok) return(hint("The report is in manuscript/Methods_Results.docx."))
+    body <- paste(readLines(html, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
+    body <- sub("(?s).*<body[^>]*>", "", body, perl = TRUE); body <- sub("(?s)</body>.*", "", body, perl = TRUE)
+    shiny::tags$div(class = "report", shiny::HTML(body))
+  })
+  output$prj_log <- shiny::renderUI({
+    r <- rv$prj_result
+    if (!is.null(rv$prj_job)) shiny::invalidateLater(2000)
+    log <- if (!is.null(r$log)) r$log else file.path(if (is.null(rv$prj_dir)) "" else rv$prj_dir,
+                                                       "results", "run_all.log")
+    if (!file.exists(log)) return(hint("The log of run_all.R appears here once the project runs."))
+    shiny::tags$pre(class = "runlog", paste(readLines(log, warn = FALSE), collapse = "\n"))
+  })
 }
