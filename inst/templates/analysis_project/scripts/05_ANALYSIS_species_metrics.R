@@ -31,3 +31,18 @@ if (length(spaces) > 1) {
     theme_minimal(base_size = 11)
   save_figure(p, "Fig3_metric_congruence", width = 6.5, height = 0.4 * nrow(cong) / length(mets) + 2.5)
 }
+
+# --- extinction scenarios (IUCN categories): threatened species removed by
+#     decreasing extinction probability vs at random, and stochastic extinctions
+if (!is.null(PARAMS$extinction) && !is.null(iucn)) {
+  ext <- extinction_scenarios(spaces, iucn, steps = PARAMS$extinction$steps,
+                              n_axes = PARAMS$n_axes, hull_axes = PARAMS$extinction$hull_axes,
+                              nrep = PARAMS$extinction$nrep, seed = PARAMS$seed)
+  print(ext)
+  save_object(ext, "extinction")
+  save_table(ext$summary, "Table8_extinction_scenarios")
+  save_table(ext$curve, "TableS10_extinction_curves")
+  if (!is.null(ext$stochastic)) save_table(ext$stochastic, "TableS11_stochastic_extinctions")
+  for (m in c("FRic", "FDis"))
+    save_figure(plot_extinction(ext, m), paste0("Fig6_extinction_", m), width = 8, height = 4)
+}

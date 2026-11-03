@@ -36,7 +36,8 @@ lst <- function(x) {
 P <- PARAMS
 t1 <- tab("Table1_traits"); t2 <- tab("Table2_spaces"); s1 <- tab("TableS1_missing_values")
 t3 <- tab("Table3_procrustes"); t4 <- tab("Table4_metric_congruence")
-t5 <- tab("Table5_nonnative_summary"); ie <- tab("TableS2_imputation_error")
+t5 <- tab("Table5_groups_summary"); t7 <- tab("Table7_focal_summary");
+t8 <- tab("Table8_extinction_scenarios"); t9 <- tab("Table9_continuous_variable"); ie <- tab("TableS2_imputation_error")
 n_sp <- if (!is.null(s1)) s1$n_species_analysed[1] else NA
 dims <- unique(t1$dimension)
 types <- c(Q = "continuous", O = "ordinal", N = "nominal", B = "multichoice",
@@ -99,19 +100,50 @@ txt_metrics <- if (!is.null(tab("TableS5_species_metrics"))) sprintf(paste(
   if (!is.null(P$iucn_col)) paste(" FUSE was computed as log(1 + P x FSp + P x FUn), with P the",
     "extinction probability of the IUCN category of the species (EDGE2; Gumbs et al. 2023),",
     "following Pimiento et al. (2020).") else "", 100 * P$top) else ""
-nn <- P$nonnative
-txt_nn <- if (!is.null(t5)) sprintf(paste("**Non-native species.** %s In each space, the functional",
-  "novelty (FNov) of a non-native species was measured as its distance to the nearest native",
-  "species, and its position was compared to the convex hull of native species (first %d axes).",
-  "For native species, the relative change in FUn once non-native species are added was computed,",
-  "and for the whole fauna the change in functional richness, dispersion, originality and mean",
-  "pairwise distance%s."),
-  if (identical(nn$source, "simulate")) sprintf(paste("Introductions were simulated for exploration:",
-    "%g%% of the species were given a non-native status, with a %s bias in the %s space."),
-    100 * nn$prop, nn$bias, nn$sim_space) else
-    sprintf("Species status was read from the column '%s' ('%s' = native).", P$status_col, nn$native),
-  nn$hull_axes,
-  if (!identical(nn$null, "none")) sprintf(", compared to %d null replicates (%s)", nn$nrep, nn$null) else "") else ""
+gp <- P$groups
+txt_nn <- if (!is.null(t5)) paste0(sprintf(paste("**Species groups.** %s In each space, the",
+  "functional structure of each group was described by the volume of its convex hull (first %d",
+  "axes; FRic, relative to all species), its dispersion, originality and mean pairwise distance.",
+  "The overlap of pairs of groups was measured as the volume of the intersection of their hulls",
+  "divided by the volume of their union, and the functional Jaccard dissimilarity was split into",
+  "turnover and nestedness components (Villéger et al. 2013).%s%s"),
+  if (identical(gp$source, "simulate")) sprintf(paste("A native / non-native status was simulated for",
+    "exploration: %g%% of the species were given a non-native status, with a %s bias in the %s space."),
+    100 * gp$prop, gp$bias, gp$sim_space) else
+    sprintf("Groups were read from the column '%s'%s%s.", gp$col,
+            if (!is.null(gp$sep)) sprintf(" (several labels per species, separated by '%s')", gp$sep) else "",
+            if (length(gp$recode)) paste0("; labels were merged as ", paste(sprintf("%s = %s", names(gp$recode),
+              vapply(gp$recode, paste, "", collapse = ", ")), collapse = "; ")) else ""),
+  gp$hull_axes,
+  if (!identical(gp$null, "none")) sprintf(paste(" Overlap and distance between centroids were compared",
+    "to %d permutations of the group labels (standardised effect sizes)."), gp$nrep) else "",
+  " Differences in position and dispersion were tested with PERMANOVA and PERMDISP on the coordinates."),
+  if (!is.null(gp$reference)) sprintf(paste(" Species of each focal group were then positioned",
+    "relative to the reference group (%s): novelty (FNov) as the distance to the nearest",
+    "reference species, position relative to the convex hull of reference species, relative change",
+    "in the uniqueness (FUn) of reference species once focal species are added, and contribution of",
+    "the focal group to functional richness, dispersion, originality and mean pairwise distance."),
+    paste(gp$reference, collapse = " + ")) else "") else ""
+txt_extra <- paste(c(
+  if (!is.null(gp) && isTRUE(gp$density)) sprintf(paste("The overlap of groups was also measured",
+    "with kernel densities estimated on a grid of the first %d axes (Gaussian kernel, the same",
+    "bandwidth for all groups%s), as the sum over the grid of the minimum of the two densities",
+    "(Carmona et al. 2016)."), gp$density_axes,
+    if (!is.null(gp$abundance_col)) sprintf(", species weighted by '%s'", gp$abundance_col) else ""),
+  if (!is.null(gp$sites)) paste0("Within each assemblage, the contribution of focal species was measured",
+    " as the change in FRic, FDis, FOri and MPD between the reference species alone and the reference",
+    " plus focal species", if (!is.null(gp$sites$group_col)) " (groups defined per assemblage)." else "."),
+  if (!is.null(t8)) sprintf(paste("**Extinction scenarios.** In each space, threatened species were",
+    "removed by decreasing extinction probability (EDGE2; ties at random), and the relative change in",
+    "FRic, FDis, FOri and MPD was compared with the removal of the same number of species at random",
+    "(%d replicates); extinctions were also drawn stochastically with the EDGE2 probabilities."),
+    P$extinction$nrep),
+  if (!is.null(t9)) sprintf(paste("**Continuous variable.** The variable '%s' (transformation: %s) was",
+    "fitted linearly on the first %d axes of each space (vector fitting), its functional",
+    "autocorrelation was measured as the correlation between the value of each species and the",
+    "mean of its %d nearest neighbours, and it was correlated with FUn and FSp (Spearman); p-values",
+    "from %d permutations."), P$covariate$col, P$covariate$transform, P$covariate$fit_axes, P$k,
+    P$covariate$nperm)), collapse = "\n\n")
 ```
 
 # Methods
@@ -138,6 +170,8 @@ and `r txt_axes`.
 `r txt_metrics`
 
 `r txt_nn`
+
+`r txt_extra`
 
 All analyses were run in R with the package DisentFunSpaces ({{DFS_VERSION}};
 Toussaint et al. 2026); versions of R and packages are listed in `session_info.txt`.
@@ -193,8 +227,20 @@ if (!is.null(t4)) {
 
 ```{r t5, results = "asis"}
 if (!is.null(t5)) {
-  cat("\n\n**Table 5.** Non-native species in each space (medians).\n\n")
+  cat("\n\n**Table 5.** Separation of the species groups in each space.\n\n")
   print(kable3(t5))
+}
+if (!is.null(t7)) {
+  cat("\n\n**Table 7.** Focal groups relative to the reference group (medians).\n\n")
+  print(kable3(t7))
+}
+if (!is.null(t8)) {
+  cat("\n\n**Table 8.** Relative loss after removing the threatened species (extinction risk vs random).\n\n")
+  print(kable3(t8))
+}
+if (!is.null(t9)) {
+  cat("\n\n**Table 9.** Continuous variable in each space.\n\n")
+  print(kable3(t9))
 }
 ```
 

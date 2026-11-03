@@ -46,17 +46,63 @@ run_app <- function(launch.browser = TRUE, max_upload_mb = 1000, ...) {
   b <- tryCatch(utils::sessionInfo()$BLAS, error = function(e) "")
   length(b) == 1 && nzchar(b) && grepl("libRblas", b, fixed = TRUE)
 }
-# fast reader for large text files ('data.table' if installed)
-.read_table_fast <- function(path, sep) {
-  if (requireNamespace("data.table", quietly = TRUE)) {
-    d <- data.table::fread(path, sep = sep, header = TRUE, na.strings = c("NA", ""),
-                           check.names = FALSE, data.table = FALSE, showProgress = FALSE,
-                           integer64 = "double", quote = "\"")
-    return(d)
+# guess the field separator (and decimal mark) of a delimited text file from
+# its first lines: the candidate (";", tab, ",", "|") that splits every line
+# into the same number (> 1) of fields, the most frequent one winning
+.detect_sep <- function(path, n = 20L) {
+  l <- tryCatch(readLines(path, n = n, warn = FALSE, encoding = "UTF-8"),
+                error = function(e) character(0))
+  l <- sub("^\ufeff", "", l)
+  l <- l[nzchar(trimws(l))]
+  if (!length(l)) return(list(sep = ",", dec = "."))
+  strip <- function(x) gsub('"[^"]*"', "", x)          # ignore quoted fields
+  l2 <- strip(l)
+  cand <- c(";", "\t", ",", "|")
+  cnt <- vapply(cand, function(ch) {
+    k <- lengths(regmatches(l2, gregexpr(ch, l2, fixed = TRUE)))
+    if (k[1] > 0 && length(unique(k)) == 1L) k[1] else if (k[1] > 0) k[1] / 2 else 0
+  }, numeric(1))
+  sep <- if (max(cnt) > 0) cand[which.max(cnt)] else ","
+  # decimal comma (French / European CSV): numbers like 0,25 between separators
+  dec <- "."
+  if (sep != ",") {
+    body <- l2[-1]
+    if (length(body) &&
+        any(grepl("(^|[^0-9.])[0-9]+,[0-9]+($|[^0-9])", body)) &&
+        !any(grepl("(^|[^0-9,])[0-9]+\\.[0-9]+($|[^0-9])", body))) dec <- ","
   }
-  utils::read.table(path, header = TRUE, sep = sep, quote = "\"",
-                    stringsAsFactors = FALSE, check.names = FALSE, na.strings = c("NA", ""),
-                    comment.char = "")
+  list(sep = sep, dec = dec)
+}
+
+# fast reader for large text files ('data.table' if installed). `sep = "auto"`
+# guesses the separator; a table read as a single column with the separator
+# chosen by the user is read again with the guessed one.
+.read_table_fast <- function(path, sep = "auto", dec = NULL) {
+  guess <- .detect_sep(path)
+  if (identical(sep, "auto") || is.null(sep) || !nzchar(sep)) sep <- guess$sep
+  if (is.null(dec)) dec <- if (identical(sep, guess$sep)) guess$dec else "."
+  rd <- function(sep, dec) {
+    if (requireNamespace("data.table", quietly = TRUE)) {
+      d <- data.table::fread(path, sep = sep, dec = dec, header = TRUE,
+                             na.strings = c("NA", ""), check.names = FALSE,
+                             data.table = FALSE, showProgress = FALSE,
+                             integer64 = "double", quote = "\"", encoding = "UTF-8")
+    } else {
+      d <- utils::read.table(path, header = TRUE, sep = sep, dec = dec, quote = "\"",
+                             stringsAsFactors = FALSE, check.names = FALSE,
+                             na.strings = c("NA", ""), comment.char = "",
+                             fileEncoding = "UTF-8")
+    }
+    names(d) <- sub("^\ufeff", "", names(d))
+    d
+  }
+  d <- rd(sep, dec)
+  if (ncol(d) == 1L && !identical(sep, guess$sep)) {
+    sep <- guess$sep; dec <- guess$dec
+    d <- rd(sep, dec)
+  }
+  attr(d, "sep") <- sep; attr(d, "dec") <- dec
+  d
 }
 
 #' @rdname run_app
@@ -71,19 +117,23 @@ fs_app <- function() shiny::shinyApp(ui = app_ui(), server = app_server)
   "Toussaint A., Tedesco P., Grenouillet G., Kasari-Toussaint L., Brosse S. (2026)",
   "Disentangling functional spaces: a multidimensional framework for ecology and",
   "conservation. Ecography e08578. doi:10.1002/ecog.08578")
+# column names proposed as grouping variables (not traits)
+.GROUP_COL_GUESS <- c("status", "origin", "native_status", "nativeness", "alien", "introduced",
+                      "order", "family", "use", "uses", "human_use", "migration", "migratory",
+                      "activity", "diel", "diurnal", "group", "groups")
 # the steps of the workflow: tab value, label, what it does
 .APP_STEPS <- data.frame(
   tab = c("1. Data", "2. Traits", "3. Missing values", "4. Functional spaces",
-          "5. Compare spaces", "6. Species metrics", "7. Non-native species", "8. Export"),
+          "5. Compare spaces", "6. Species metrics", "7. Species groups", "8. Export"),
   label = c("Data", "Traits", "Missing values", "Functional spaces", "Compare spaces",
-            "Species metrics", "Non-native species", "Export"),
+            "Species metrics", "Species groups", "Export"),
   what = c("A trait table: one row per species, one column per trait (or per modality).",
            "The type and the functional dimension of each trait.",
            "Keep them (pairwise Gower distance), drop incomplete species, or impute them.",
            "One space per dimension and per combination: generalised Gower distance + PCoA.",
            "Procrustes tests: do the dimensions place species alike?",
            "Functional uniqueness, specialisation and FUSE in every space.",
-           "Novelty of non-native species and their effect on the native fauna (optional).",
+           "Groups of species (origin, uses, migration...): overlap, novelty, contribution (optional).",
            "A reproducible project: data, scripts, results and report in one .zip."),
   optional = c(FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE, FALSE),
   stringsAsFactors = FALSE)
@@ -168,10 +218,13 @@ app_ui <- function() {
             shiny::fileInput("file", "Trait table (.csv, .tsv, .txt, .xlsx; up to 1 GB)",
                              accept = c(".csv", ".tsv", ".txt", ".xlsx", ".xls")),
             shiny::selectInput("sep", "Separator (text files)",
-                               c("Comma" = ",", "Semicolon" = ";", "Tab" = "\t"))),
+                               c("Auto-detect" = "auto", "Comma" = ",", "Semicolon" = ";",
+                                 "Tab" = "\t", "Pipe" = "|"), selected = "auto")),
           shiny::selectInput("species_col", "Species column", choices = NULL),
           shiny::selectInput("iucn_col", "IUCN category column (optional, for FUSE)", choices = NULL),
-          shiny::selectInput("status_col", "Native / non-native status column (optional)", choices = NULL),
+          shiny::selectizeInput("group_cols", "Other variables, not traits (optional: groups, continuous attributes)", choices = NULL,
+                                multiple = TRUE,
+                                options = list(placeholder = "e.g. status, use, migration")),
           sh$p(class = "step-help",
                "One row per species, one column per trait (or per modality for fuzzy-coded",
                " and multichoice traits). Intraspecific records must be aggregated beforehand.")
@@ -354,52 +407,148 @@ app_ui <- function() {
               shiny::selectInput("m_b", NULL, choices = NULL))),
             shiny::plotOutput("metric_scatter", height = "380px"))
         ),
-        bslib::card(bslib::card_header("Species metrics (all spaces)"), DT::DTOutput("metric_table"))
+        bslib::card(bslib::card_header("Species metrics (all spaces)"), DT::DTOutput("metric_table")),
+        bslib::card(full_screen = TRUE,
+          bslib::card_header(bslib::layout_columns(col_widths = c(4, 2, 2, 2, 2),
+            sh$span("Extinction scenarios (needs the IUCN column)"),
+            shiny::numericInput("ext_steps", "Steps", 10, 2, 50),
+            shiny::numericInput("ext_nrep", "Replicates", 49, 9, 9999),
+            shiny::selectInput("ext_metric", "Metric", c("FRic", "FDis", "FOri", "MPD")),
+            shiny::actionButton("run_ext", "Run", class = "btn-primary btn-sm w-100", style = "margin-top: 1.9rem;"))),
+          sh$p(class = "step-help",
+            "Species are removed by decreasing extinction probability (CR, EN, VU; ties at random)",
+            " or at random, up to the number of threatened species; the stochastic scenario draws",
+            " extinctions with the EDGE2 probabilities. Metrics are relative to all species",
+            " (hulls on the axes set in tab 7)."),
+          shiny::plotOutput("ext_plot", height = "330px"),
+          bslib::layout_columns(col_widths = c(6, 6),
+            sh$div(sh$h6("Loss after removing the threatened species"), DT::DTOutput("ext_summary")),
+            sh$div(sh$h6("Stochastic extinctions (EDGE2 probabilities)"), DT::DTOutput("ext_stoch"))))
       )
     ),
 
-    # 7. NON-NATIVE SPECIES ----------------------------------------------------
-    bslib::nav_panel(.step_title(7, "Non-natives"), value = "7. Non-native species",
+    # 7. SPECIES GROUPS -------------------------------------------------------
+    bslib::nav_panel(.step_title(7, "Groups"), value = "7. Species groups",
       bslib::layout_sidebar(
-        sidebar = bslib::sidebar(width = 320,
-          shiny::radioButtons("nn_src", "Species status",
-            c("Status column of the data" = "column",
-              "Simulate introductions (exploration)" = "simulate")),
-          shiny::conditionalPanel("input.nn_src == 'column'",
-            shiny::textInput("nn_native", "Label of native species", "native"),
-            sh$p(class = "step-help", "Any other non-missing value is treated as non-native.")),
-          shiny::conditionalPanel("input.nn_src == 'simulate'",
+        sidebar = bslib::sidebar(width = 330,
+          shiny::radioButtons("grp_src", "Non-trait variable",
+            c("Categories (groups of species)" = "column",
+              "Continuous variable" = "continuous",
+              "Simulate native / non-native status (exploration)" = "simulate")),
+          shiny::conditionalPanel("input.grp_src != 'simulate'",
+            shiny::selectInput("grp_col", "Variable", choices = NULL),
+            sh$p(class = "step-help",
+                 "Any attribute that is not a trait: origin, human use, migration, activity period,",
+                 " threat status, taxonomy, range size, abundance... Declare the columns in tab 1",
+                 " (the IUCN column is also offered).")),
+          shiny::conditionalPanel("input.grp_src == 'column'",
+            shiny::textInput("grp_sep", "Separator of multiple labels (optional)", "",
+                             placeholder = "e.g. ;  for 'food;aquarium'"),
+            shiny::textAreaInput("grp_recode", "Merge labels (optional, one group per line)", "",
+                                 rows = 2, placeholder = "threatened = VU, EN, CR\nother = LC, NT"),
+            shiny::uiOutput("grp_levels_info"),
+            shiny::selectizeInput("grp_levels", "Groups analysed", choices = NULL, multiple = TRUE)),
+          shiny::conditionalPanel("input.grp_src == 'continuous'",
+            shiny::selectInput("cov_transform", "Transformation",
+                               c("None" = "none", "log10" = "log10", "log10(1 + x)" = "log1p", "Ranks" = "rank")),
+            shiny::numericInput("cov_fit_axes", "Axes of the linear fit", 4, 1, 20),
+            shiny::numericInput("cov_nperm", "Permutations", 999, 9, 99999)),
+          shiny::conditionalPanel("input.grp_src == 'simulate'",
             shiny::sliderInput("nn_prop", "Proportion of non-native species", 0.02, 0.5, 0.1, 0.01),
             shiny::selectInput("nn_bias", "Position of introduced species",
                                c("random", "peripheral", "central")),
             shiny::selectInput("nn_sim_space", "Space used for the bias", choices = NULL)),
-          shiny::numericInput("nn_hull_axes", "Axes for convex hulls", 4, 2, 8),
-          shiny::selectInput("nn_null", "Null model (assemblage change)",
-            c("None" = "none", "Permute status" = "permute",
-              "Random colonists (needs a wider pool)" = "pool")),
-          shiny::numericInput("nn_nrep", "Null replicates", 99, 9, 9999),
-          shiny::actionButton("run_nonnative", "Compute", class = "btn-primary w-100"),
+          shiny::conditionalPanel("input.grp_src != 'continuous'",
+            shiny::selectizeInput("grp_ref", "Reference group (species level; optional)",
+                                  choices = NULL, multiple = TRUE,
+                                  options = list(placeholder = "none: compare groups only")),
+            shiny::conditionalPanel("input.grp_ref && input.grp_ref.length > 0",
+              shiny::checkboxInput("grp_pool", "Pool the other groups into one focal group", FALSE)),
+            shiny::numericInput("grp_hull_axes", "Axes for convex hulls", 4, 2, 8),
+            shiny::checkboxInput("grp_density", "Also overlap of kernel densities (robust to outliers)", FALSE),
+            shiny::conditionalPanel("input.grp_density",
+              bslib::layout_columns(col_widths = c(6, 6),
+                shiny::numericInput("grp_density_axes", "Axes (2-4)", 2, 2, 4),
+                shiny::numericInput("grp_bw", "Bandwidth x", 1, 0.1, 5, step = 0.1)),
+              shiny::selectInput("grp_abund", "Weight species by (optional)", choices = NULL)),
+            shiny::selectInput("grp_null", "Null model",
+              c("None" = "none", "Permute group labels" = "permute")),
+            shiny::numericInput("grp_nrep", "Null replicates", 99, 9, 9999),
+            sh$details(sh$summary("Assemblages (optional)"),
+              shiny::fileInput("grp_sites_file", "Long table: one row per species in an assemblage",
+                               accept = c(".csv", ".tsv", ".txt")),
+              shiny::uiOutput("grp_sites_cols"),
+              sh$p(class = "step-help",
+                   "Columns: assemblage (site, basin...), species and, optionally, the group of the species",
+                   " in that assemblage (e.g. native here, introduced there). Needs a reference group."))),
+          shiny::actionButton("run_groups", "Compute", class = "btn-primary w-100"),
           sh$p(class = "step-help",
-            "Non-native species: FNov = distance to the nearest native species; FSp_native =",
-            " distance to the native centroid; position inside/outside the native convex hull.",
-            " Natives: relative change in FUn once non-native species are added (dFUn_rel).",
-            " Whole fauna: change in FRic, FDis, FOri and MPD (uses n axes / k of tabs 5-6).")
+            "Groups: convex hull volume (FRic), dispersion, pairwise overlap of hulls",
+            " (intersection / union, functional Jaccard turnover and nestedness) and of kernel",
+            " densities, PERMANOVA / PERMDISP on the coordinates. With a reference group (e.g.",
+            " natives, residents, unexploited species): novelty of each focal species (FNov =",
+            " distance to the nearest reference species), position in the reference hull, loss of",
+            " uniqueness of reference species (dFUn_rel), contribution of the focal group to FRic,",
+            " FDis, FOri and MPD, overall and per assemblage. Continuous variable: linear fit on the",
+            " axes, functional autocorrelation (k nearest neighbours) and correlations with FUn and",
+            " FSp (uses n axes / k of tabs 5-6).")
         ),
-        bslib::card(bslib::card_header("Effect of non-native species in each space"),
-                    DT::DTOutput("nn_summary")),
-        bslib::layout_columns(col_widths = c(7, 5),
+        # --- continuous variable
+        shiny::conditionalPanel("input.grp_src == 'continuous'",
+          bslib::card(bslib::card_header("Continuous variable in each space"),
+                      DT::DTOutput("cov_summary")),
           bslib::card(full_screen = TRUE,
             bslib::card_header(bslib::layout_columns(col_widths = c(6, 3, 3),
-              shiny::selectInput("nn_space", NULL, choices = NULL),
-              shiny::numericInput("nn_ax1", NULL, 1, 1, 20),
-              shiny::numericInput("nn_ax2", NULL, 2, 1, 20))),
-            shiny::plotOutput("nn_plot", height = "420px")),
-          bslib::card(bslib::card_header("Assemblage-level change"),
-            DT::DTOutput("nn_assemblage"))
+              shiny::selectInput("cov_space", NULL, choices = NULL),
+              shiny::numericInput("cov_ax1", NULL, 1, 1, 20),
+              shiny::numericInput("cov_ax2", NULL, 2, 1, 20))),
+            shiny::plotOutput("cov_plot", height = "440px")),
+          bslib::card(bslib::card_header("Species"), DT::DTOutput("cov_species"))),
+        # --- groups
+        shiny::conditionalPanel("input.grp_src != 'continuous'",
+        bslib::card(bslib::card_header("Separation of the groups in each space"),
+                    DT::DTOutput("grp_summary"),
+                    shiny::uiOutput("grp_focal_summary_ui")),
+        bslib::layout_columns(col_widths = c(7, 5),
+          bslib::card(full_screen = TRUE,
+            bslib::card_header(bslib::layout_columns(col_widths = c(5, 2, 2, 3),
+              shiny::selectInput("grp_space", NULL, choices = NULL),
+              shiny::numericInput("grp_ax1", NULL, 1, 1, 20),
+              shiny::numericInput("grp_ax2", NULL, 2, 1, 20),
+              shiny::checkboxInput("grp_contours", "Densities", FALSE))),
+            shiny::plotOutput("grp_plot", height = "440px")),
+          bslib::card(full_screen = TRUE,
+            bslib::card_header(bslib::layout_columns(col_widths = c(5, 7),
+              sh$span("Pairwise overlap across spaces"),
+              shiny::selectInput("grp_pair_metric", NULL,
+                c("Hull overlap (intersection / union)" = "overlap",
+                  "SES of the overlap (null model)" = "ses_overlap",
+                  "Overlap of kernel densities" = "overlap_kde",
+                  "SES of the density overlap" = "ses_overlap_kde",
+                  "Jaccard dissimilarity" = "beta_jac",
+                  "Turnover component" = "beta_jtu",
+                  "Nestedness component" = "beta_jne",
+                  "Distance between centroids" = "centroid_dist",
+                  "SES of the centroid distance" = "ses_centroid_dist")))),
+            shiny::plotOutput("grp_overlap_plot", height = "440px"))
         ),
         bslib::navset_card_tab(
-          bslib::nav_panel("Non-native species", DT::DTOutput("nn_species_table")),
-          bslib::nav_panel("Native species", DT::DTOutput("nn_native_table")))
+          bslib::nav_panel("Groups", DT::DTOutput("grp_groups_table")),
+          bslib::nav_panel("Pairs of groups", DT::DTOutput("grp_pairs_table")),
+          bslib::nav_panel("Species mixing", DT::DTOutput("grp_species_table")),
+          bslib::nav_panel("Focal species", DT::DTOutput("grp_focal_table")),
+          bslib::nav_panel("Reference species", DT::DTOutput("grp_ref_table")),
+          bslib::nav_panel("Contribution of focal groups", DT::DTOutput("grp_contrib_table")),
+          bslib::nav_panel("Assemblages",
+            bslib::layout_columns(col_widths = c(4, 8),
+              shiny::selectInput("grp_site_metric", NULL,
+                c("Relative contribution to FRic" = "FRic_change_rel", "SES of the FRic contribution" = "ses_FRic",
+                  "Contribution to FDis" = "d_FDis", "SES of the FDis contribution" = "ses_FDis",
+                  "Contribution to FOri" = "d_FOri", "Contribution to MPD" = "d_MPD",
+                  "Hull overlap focal / reference" = "overlap",
+                  "Focal species outside the reference hull" = "p_focal_outside"))),
+            shiny::plotOutput("grp_sites_plot", height = "340px"),
+            DT::DTOutput("grp_sites_table"))))
       )
     ),
 
@@ -434,7 +583,7 @@ app_ui <- function() {
               shiny::downloadButton("dl_coords", "PCoA coordinates (.csv)", class = "btn-sm"),
               shiny::downloadButton("dl_cmp", "Procrustes tests (.csv)", class = "btn-sm"),
               shiny::downloadButton("dl_metrics", "Species metrics (.csv)", class = "btn-sm"),
-              shiny::downloadButton("dl_nonnative", "Non-native analysis (.csv)", class = "btn-sm"),
+              shiny::downloadButton("dl_nonnative", "Species groups (.zip of .csv)", class = "btn-sm"),
               shiny::downloadButton("dl_rds", "All R objects (.rds)", class = "btn-sm")))),
         .card_x("Contents of the project",
           bslib::navset_underline(id = "prj_tabs",
@@ -463,10 +612,14 @@ app_ui <- function() {
 # ---------------------------------------------------------------------------
 app_server <- function(input, output, session) {
   rv <- shiny::reactiveValues(ti = NULL, traits = NULL, traits_final = NULL, spaces = NULL,
-                              cmp = NULL, metrics = NULL, nonnative = NULL,
-                              nn_status = NULL, custom = list(), ti_version = 0, spaces_version = 0,
+                              cmp = NULL, metrics = NULL, groups = NULL, grp_set = NULL,
+                              extinction = NULL, covariate = NULL,
+                              custom = list(), ti_version = 0, spaces_version = 0,
                               valid_msg = NULL, missing_msg = NULL, phylo_name = NULL)
   notify_error <- function(e) shiny::showNotification(conditionMessage(e), type = "error", duration = 10)
+  sig3 <- function(t) { num <- vapply(t, is.numeric, logical(1)); t[num] <- lapply(t[num], signif, 3); t }
+  dt_page <- function(t) DT::datatable(sig3(t), rownames = FALSE,
+                                       options = list(pageLength = 10, scrollX = TRUE))
 
   # ---- 1. data --------------------------------------------------------------
   raw <- shiny::reactive({
@@ -499,21 +652,34 @@ app_server <- function(input, output, session) {
     shiny::updateSelectInput(session, "species_col", choices = cols, selected = guess_sp)
     shiny::updateSelectInput(session, "iucn_col", choices = c("(none)" = "", cols),
                              selected = if (is.na(guess_iucn)) "" else guess_iucn)
-    guess_st <- cols[which(tolower(cols) %in% c("status", "origin", "native_status",
-                                                "nativeness", "alien", "introduced"))[1]]
-    shiny::updateSelectInput(session, "status_col", choices = c("(none)" = "", cols),
-                             selected = if (is.na(guess_st)) "" else guess_st)
+    guess_st <- cols[tolower(cols) %in% .GROUP_COL_GUESS]
+    shiny::updateSelectizeInput(session, "group_cols", choices = cols, selected = guess_st)
     # the full bird dataset has species pairs sharing no reproduction trait:
     # propose imputation (as in the published analysis)
     if (identical(input$src, "example_all")) shiny::updateRadioButtons(session, "missing", selected = "impute")
     rv$ti <- NULL; rv$traits <- NULL; rv$traits_final <- NULL
-    rv$spaces <- NULL; rv$cmp <- NULL; rv$metrics <- NULL; rv$nonnative <- NULL
+    rv$spaces <- NULL; rv$cmp <- NULL; rv$metrics <- NULL; rv$groups <- NULL
+    rv$extinction <- NULL; rv$covariate <- NULL
   })
 
+  read_sep <- shiny::reactive({
+    d <- raw()
+    s <- attr(d, "sep"); if (is.null(s)) s <- if (identical(input$sep, "auto")) "," else input$sep
+    dc <- attr(d, "dec"); if (is.null(dc)) dc <- "."
+    list(sep = s, dec = dc)
+  })
   output$data_info <- shiny::renderUI({
     d <- raw(); shiny::req(d)
-    shiny::tags$p(sprintf("%d species x %d columns - %.1f%% missing cells",
-                          nrow(d), ncol(d), 100 * mean(is.na(d))))
+    rs <- read_sep()
+    sep_txt <- if (!is.null(attr(d, "sep")))
+      sprintf(" - separator: %s, decimal mark: '%s'",
+              c(";" = "semicolon", "\t" = "tab", "," = "comma", "|" = "pipe")[[rs$sep]], rs$dec)
+    else ""
+    shiny::tagList(
+      shiny::tags$p(sprintf("%d species x %d columns - %.1f%% missing cells%s",
+                            nrow(d), ncol(d), 100 * mean(is.na(d)), sep_txt)),
+      if (ncol(d) == 1L) shiny::tags$div(class = "alert alert-warning",
+        "Only one column was read: check the separator of the file."))
   })
   output$perf_info <- shiny::renderUI({
     d <- raw(); shiny::req(d)
@@ -540,7 +706,7 @@ app_server <- function(input, output, session) {
   # ---- 2. trait information --------------------------------------------------
   trait_cols <- shiny::reactive({
     shiny::req(raw(), input$species_col)
-    setdiff(names(raw()), c(input$species_col, input$iucn_col, input$status_col))
+    setdiff(names(raw()), c(input$species_col, input$iucn_col, input$group_cols))
   })
 
   do_guess <- function() {
@@ -550,7 +716,7 @@ app_server <- function(input, output, session) {
     rv$ti <- g; rv$ti_version <- rv$ti_version + 1
   }
   shiny::observeEvent(input$guess, do_guess())
-  shiny::observeEvent(list(raw(), input$species_col, input$iucn_col, input$status_col), {
+  shiny::observeEvent(list(raw(), input$species_col, input$iucn_col, input$group_cols), {
     sc <- input$species_col
     if (is.null(sc) || !nzchar(sc)) return()
     if (isTRUE(input$src %in% c("example", "example_all")) && identical(sc, "species")) {
@@ -770,7 +936,8 @@ app_server <- function(input, output, session) {
                    progress = function(i, n, nm) shiny::setProgress((i - 1) / n, detail = nm))
     }), error = function(e) { notify_error(e); NULL })
     shiny::req(res)
-    rv$spaces <- res; rv$cmp <- NULL; rv$metrics <- NULL; rv$nonnative <- NULL
+    rv$spaces <- res; rv$cmp <- NULL; rv$metrics <- NULL; rv$groups <- NULL
+    rv$extinction <- NULL; rv$covariate <- NULL
     rv$spaces_version <- rv$spaces_version + 1
     nms <- names(res)
     shiny::updateSelectInput(session, "plot_space", choices = nms, selected = nms[length(nms)])
@@ -887,6 +1054,30 @@ app_server <- function(input, output, session) {
                                                  iucn = iucn_vec())),
                            error = function(e) { notify_error(e); NULL })
   })
+  shiny::observeEvent(input$run_ext, {
+    shiny::req(rv$spaces)
+    iu <- iucn_vec()
+    if (is.null(iu)) { shiny::showNotification("Choose the IUCN column in tab 1.", type = "warning"); return() }
+    rv$extinction <- tryCatch(shiny::withProgress(message = "Extinction scenarios", value = 0.3,
+      extinction_scenarios(rv$spaces, iu, steps = input$ext_steps, n_axes = n_axes_val(),
+                           hull_axes = if (is.null(input$grp_hull_axes)) 4 else input$grp_hull_axes,
+                           nrep = input$ext_nrep, seed = input$seed)),
+      error = function(e) { notify_error(e); NULL })
+  })
+  output$ext_plot <- shiny::renderPlot({
+    shiny::validate(shiny::need(rv$extinction, "Click 'Run'."))
+    plot_extinction(rv$extinction, input$ext_metric)
+  }, res = 96)
+  output$ext_summary <- DT::renderDT({
+    shiny::req(rv$extinction)
+    t <- rv$extinction$summary; t <- t[t$metric == input$ext_metric, ]
+    DT::datatable(sig3(t), rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
+  })
+  output$ext_stoch <- DT::renderDT({
+    shiny::req(rv$extinction$stochastic)
+    t <- rv$extinction$stochastic; t <- t[t$metric == input$ext_metric, ]
+    DT::datatable(sig3(t), rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
+  })
   metric_cmp <- shiny::reactive({
     shiny::req(rv$metrics, input$metric %in% names(rv$metrics))
     compare_metrics(rv$metrics, input$metric, top = input$top)
@@ -921,78 +1112,247 @@ app_server <- function(input, output, session) {
     DT::datatable(m, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE))
   })
 
-  # ---- 7. non-native species ---------------------------------------------------
-  status_vec <- shiny::reactive({
-    if (is.null(input$status_col) || !nzchar(input$status_col)) return(NULL)
-    d <- raw(); shiny::req(input$status_col %in% names(d))
-    stats::setNames(as.character(d[[input$status_col]]), as.character(d[[input$species_col]]))
+  # ---- 7. species groups -----------------------------------------------------
+  shiny::observe({
+    gc <- unique(c(input$group_cols, if (isTRUE(nzchar(input$iucn_col))) input$iucn_col))
+    shiny::updateSelectInput(session, "grp_col", choices = if (length(gc)) gc else c("(declare columns in tab 1)" = ""),
+      selected = if (isTRUE(shiny::isolate(input$grp_col) %in% gc)) shiny::isolate(input$grp_col) else gc[1])
+  })
+  grp_species <- shiny::reactive({
+    if (!is.null(rv$spaces)) rownames(rv$spaces[[1]]$coords) else {
+      d <- raw(); shiny::req(d, input$species_col); as.character(d[[input$species_col]])
+    }
+  })
+  grp_raw <- shiny::reactive({
+    if (!identical(input$grp_src, "column")) return(NULL)
+    gcol <- input$grp_col
+    if (is.null(gcol) || !nzchar(gcol)) return(NULL)
+    d <- raw(); shiny::req(d, gcol %in% names(d))
+    stats::setNames(as.character(d[[gcol]]), as.character(d[[input$species_col]]))
+  })
+  cov_vec <- shiny::reactive({
+    gcol <- input$grp_col
+    if (is.null(gcol) || !nzchar(gcol)) return(NULL)
+    d <- raw(); shiny::req(d, gcol %in% names(d))
+    v <- suppressWarnings(as.numeric(as.character(d[[gcol]])))
+    if (all(is.na(v))) return(NULL)
+    stats::setNames(v, as.character(d[[input$species_col]]))
+  })
+  shiny::observe({
+    d <- raw(); shiny::req(d)
+    num <- names(d)[vapply(d, is.numeric, logical(1))]
+    num <- setdiff(num, c(input$species_col, if (!is.null(rv$ti)) rv$ti$trait[rv$ti$use %in% TRUE]))
+    shiny::updateSelectInput(session, "grp_abund", choices = c("(none)" = "", num), selected = "")
+  })
+  # assemblages: long table (assemblage, species, optional group)
+  grp_sites_raw <- shiny::reactive({
+    f <- input$grp_sites_file; if (is.null(f)) return(NULL)
+    tryCatch(.read_table_fast(f$datapath, "auto"), error = function(e) { notify_error(e); NULL })
+  })
+  output$grp_sites_cols <- shiny::renderUI({
+    d <- grp_sites_raw(); if (is.null(d)) return(NULL)
+    cols <- names(d); lc <- tolower(cols)
+    pick <- function(cand, def) { i <- which(lc %in% cand)[1]; if (is.na(i)) def else cols[i] }
+    shiny::tagList(
+      shiny::tags$p(class = "step-help", sprintf("%d rows, %d columns.", nrow(d), ncol(d))),
+      shiny::selectInput("grp_site_col", "Assemblage column", cols,
+                         pick(c("site", "assemblage", "basin", "plot", "locality", "country"), cols[1])),
+      shiny::selectInput("grp_site_sp_col", "Species column", cols,
+                         pick(c("species", "sp", "taxon", "binomial"), cols[min(2, length(cols))])),
+      shiny::selectInput("grp_site_grp_col", "Group in the assemblage (optional)", c("(same as the variable)" = "", cols),
+                         pick(c("status", "origin", "group"), "")))
+  })
+  grp_comm <- shiny::reactive({
+    d <- grp_sites_raw(); if (is.null(d)) return(NULL)
+    shiny::req(input$grp_site_col %in% names(d), input$grp_site_sp_col %in% names(d))
+    gc <- if (isTRUE(nzchar(input$grp_site_grp_col))) input$grp_site_grp_col else NULL
+    tryCatch(community_from_long(d, input$grp_site_col, input$grp_site_sp_col, gc),
+             error = function(e) { notify_error(e); NULL })
+  })
+  grp_sep <- shiny::reactive(if (is.null(input$grp_sep) || !nzchar(trimws(input$grp_sep))) NULL else trimws(input$grp_sep))
+  grp_recode <- shiny::reactive(.parse_recode(input$grp_recode))
+  grp_counts <- shiny::reactive({
+    g <- grp_raw(); shiny::req(g)
+    gr <- tryCatch(.as_groups(g, grp_species(), sep = grp_sep(), recode = grp_recode()),
+                   error = function(e) NULL)
+    shiny::req(gr)
+    list(n = sort(colSums(gr$M), decreasing = TRUE), exclusive = gr$exclusive,
+         unassigned = sum(rowSums(gr$M) == 0))
+  })
+  shiny::observe({
+    if (identical(input$grp_src, "simulate")) {
+      shiny::updateSelectizeInput(session, "grp_ref", choices = c("native", "non-native"), selected = "native")
+      return()
+    }
+    if (identical(input$grp_src, "continuous")) return()
+    cn <- tryCatch(grp_counts(), error = function(e) NULL)
+    if (is.null(cn)) {
+      shiny::updateSelectizeInput(session, "grp_levels", choices = character(0))
+      shiny::updateSelectizeInput(session, "grp_ref", choices = character(0)); return()
+    }
+    lv <- names(cn$n)
+    lab <- stats::setNames(lv, sprintf("%s (%d)", lv, cn$n))
+    sel <- lv[cn$n > 2][seq_len(min(8, sum(cn$n > 2)))]
+    shiny::updateSelectizeInput(session, "grp_levels", choices = lab, selected = sel)
+    ref <- lv[tolower(lv) %in% c("native", "resident", "none", "no", "not threatened")]
+    shiny::updateSelectizeInput(session, "grp_ref", choices = lab, selected = ref[seq_len(min(1, length(ref)))])
+  })
+  output$grp_levels_info <- shiny::renderUI({
+    cn <- tryCatch(grp_counts(), error = function(e) NULL)
+    if (is.null(cn)) return(NULL)
+    shiny::tags$p(class = "step-help", sprintf("%d groups (%s), %d species without a group.",
+      length(cn$n), if (cn$exclusive) "one label per species" else "several labels per species",
+      cn$unassigned))
   })
   shiny::observe({
     shiny::req(rv$spaces)
     nm <- names(rv$spaces)
-    shiny::updateSelectInput(session, "nn_space", choices = nm,
-      selected = if (isTRUE(shiny::isolate(input$nn_space) %in% nm)) shiny::isolate(input$nn_space) else utils::tail(nm, 1))
+    shiny::updateSelectInput(session, "cov_space", choices = nm, selected = utils::tail(nm, 1))
+    shiny::updateSelectInput(session, "grp_space", choices = nm,
+      selected = if (isTRUE(shiny::isolate(input$grp_space) %in% nm)) shiny::isolate(input$grp_space) else utils::tail(nm, 1))
     shiny::updateSelectInput(session, "nn_sim_space", choices = nm, selected = utils::tail(nm, 1))
   })
-  shiny::observeEvent(input$run_nonnative, {
+  shiny::observeEvent(input$run_groups, {
     shiny::req(rv$spaces)
     sp <- rownames(rv$spaces[[1]]$coords)
-    st <- if (identical(input$nn_src, "simulate")) {
-      ss <- if (isTRUE(input$nn_sim_space %in% names(rv$spaces))) input$nn_sim_space else length(rv$spaces)
-      simulate_introductions(rv$spaces[[ss]], prop = input$nn_prop, bias = input$nn_bias,
-                             seed = input$seed)
-    } else {
-      v <- status_vec()
+    if (identical(input$grp_src, "continuous")) {
+      v <- cov_vec()
       if (is.null(v)) {
-        shiny::showNotification("Choose a status column in tab 1, or simulate introductions.",
+        shiny::showNotification("Choose a numeric variable (declared in tab 1).", type = "warning"); return()
+      }
+      rv$cov_set <- list(x = v, col = input$grp_col, transform = input$cov_transform)
+      rv$covariate <- tryCatch(shiny::withProgress(message = "Continuous variable", value = 0.3,
+        covariate_space(rv$spaces, v, transform = input$cov_transform, n_axes = n_axes_val(),
+                        k = if (is.null(input$k_nn)) 5 else input$k_nn, fit_axes = input$cov_fit_axes,
+                        nperm = input$cov_nperm, seed = input$seed)),
+        error = function(e) { notify_error(e); NULL })
+      return()
+    }
+    if (identical(input$grp_src, "simulate")) {
+      ss <- if (isTRUE(input$nn_sim_space %in% names(rv$spaces))) input$nn_sim_space else length(rv$spaces)
+      g <- simulate_introductions(rv$spaces[[ss]], prop = input$nn_prop, bias = input$nn_bias,
+                                  seed = input$seed)
+      set <- list(source = "simulate", col = NULL, groups = g, sep = NULL, recode = NULL, levels = NULL,
+                  reference = if (length(input$grp_ref)) input$grp_ref else "native")
+    } else {
+      g <- grp_raw()
+      if (is.null(g)) {
+        shiny::showNotification("Declare a grouping column in tab 1, or simulate a native / non-native status.",
                                 type = "warning"); return()
       }
-      stats::setNames(v[sp], sp)
+      lv <- input$grp_levels
+      if (length(lv) < 1) { shiny::showNotification("Choose the groups analysed.", type = "warning"); return() }
+      ref <- intersect(input$grp_ref, lv)
+      if (length(input$grp_ref) && !length(ref))
+        shiny::showNotification("The reference group is not among the groups analysed: species-level analysis skipped.",
+                                type = "warning")
+      if (length(ref) && !length(setdiff(lv, ref))) {
+        shiny::showNotification("Add at least one group other than the reference.", type = "warning"); return()
+      }
+      set <- list(source = "column", col = input$grp_col, groups = g, sep = grp_sep(),
+                  recode = grp_recode(), levels = lv, reference = if (length(ref)) ref else NULL)
     }
-    nat <- if (identical(input$nn_src, "simulate")) "native" else input$nn_native
-    rv$nn_status <- st; rv$nn_native_label <- nat
-    rv$nonnative <- tryCatch(shiny::withProgress(message = "Non-native species", value = 0.3, {
-      nonnative_all(rv$spaces, st, native = nat, n_axes = n_axes_val(),
-                    k = if (is.null(input$k_nn)) 5 else input$k_nn,
-                    hull_axes = input$nn_hull_axes, null = input$nn_null,
-                    nrep = input$nn_nrep, seed = input$seed)
+    if (is.null(set$reference) && length(set$levels) == 1) {
+      shiny::showNotification("One group only: choose a reference group or more groups.", type = "warning"); return()
+    }
+    set$density <- isTRUE(input$grp_density)
+    set$density_axes <- if (is.null(input$grp_density_axes)) 2 else input$grp_density_axes
+    set$bw <- if (is.null(input$grp_bw)) 1 else input$grp_bw
+    set$abundance_col <- if (set$density && isTRUE(nzchar(input$grp_abund))) input$grp_abund else NULL
+    ab <- if (!is.null(set$abundance_col)) {
+      d <- raw(); stats::setNames(as.numeric(d[[set$abundance_col]]), as.character(d[[input$species_col]]))
+    }
+    cm <- if (!is.null(set$reference)) grp_comm() else NULL
+    if (!is.null(grp_sites_raw()) && is.null(set$reference))
+      shiny::showNotification("Assemblages need a reference group: skipped.", type = "warning")
+    set$sites <- if (!is.null(cm)) list(site_col = input$grp_site_col, species_col = input$grp_site_sp_col,
+                                         group_col = if (isTRUE(nzchar(input$grp_site_grp_col))) input$grp_site_grp_col,
+                                         data = grp_sites_raw())
+    rv$grp_set <- set
+    rv$groups <- tryCatch(shiny::withProgress(message = "Species groups", value = 0.3, {
+      groups_all(rv$spaces, set$groups, reference = set$reference, pool_focal = isTRUE(input$grp_pool),
+                 sep = set$sep, recode = set$recode, levels = set$levels, n_axes = n_axes_val(),
+                 k = if (is.null(input$k_nn)) 5 else input$k_nn,
+                 hull_axes = input$grp_hull_axes, null = input$grp_null, nrep = input$grp_nrep,
+                 seed = input$seed, density = set$density, density_axes = set$density_axes,
+                 bw = set$bw, abundance = ab, comm = cm)
     }), error = function(e) { notify_error(e); NULL })
   })
-  sig3 <- function(t) { num <- vapply(t, is.numeric, logical(1)); t[num] <- lapply(t[num], signif, 3); t }
-  output$nn_summary <- DT::renderDT({
-    shiny::validate(shiny::need(rv$nonnative, "Click 'Compute'."))
-    DT::datatable(sig3(summary_nonnative(rv$nonnative)), rownames = FALSE,
-                  options = list(dom = "t", scrollX = TRUE))
+  # ---- continuous variable outputs
+  output$cov_summary <- DT::renderDT({
+    shiny::validate(shiny::need(rv$covariate, "Click 'Compute'."))
+    DT::datatable(sig3(rv$covariate$summary), rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
   })
-  nn_plot_r <- shiny::reactive({
-    shiny::req(rv$nonnative, input$nn_space %in% names(rv$spaces))
-    s <- rv$spaces[[input$nn_space]]
-    ax <- c(input$nn_ax1, input$nn_ax2)
+  output$cov_plot <- shiny::renderPlot({
+    shiny::req(rv$covariate, input$cov_space %in% names(rv$spaces))
+    s <- rv$spaces[[input$cov_space]]; ax <- c(input$cov_ax1, input$cov_ax2)
     shiny::validate(shiny::need(max(ax) <= ncol(s$coords), sprintf("This space has %d axes.", ncol(s$coords))),
                     shiny::need(ax[1] != ax[2], "Choose two different axes."))
-    x <- rv$nonnative
-    r <- list(nonnative = x$nonnative[x$nonnative$space == input$nn_space, -1],
-              settings = list(hull_axes = min(input$nn_hull_axes, ncol(s$coords))))
-    plot_nonnative(s, rv$nn_status, axes = ax, x = r, native = rv$nn_native_label, label = 5)
+    plot_covariate(s, rv$cov_set$x, axes = ax, transform = rv$cov_set$transform, name = rv$cov_set$col)
+  }, res = 96)
+  output$cov_species <- DT::renderDT({ shiny::req(rv$covariate); dt_page(rv$covariate$species) })
+  # ---- assemblages
+  output$grp_sites_plot <- shiny::renderPlot({
+    shiny::validate(shiny::need(rv$groups$sites, "Upload assemblages (sidebar) and choose a reference group."),
+                    shiny::need(input$grp_site_metric %in% names(rv$groups$sites),
+                                "Not computed: choose the 'Permute group labels' null model."))
+    plot_group_sites(rv$groups, input$grp_site_metric)
+  }, res = 96)
+  output$grp_sites_table <- DT::renderDT({ shiny::req(rv$groups$sites); dt_page(rv$groups$sites) })
+  output$grp_summary <- DT::renderDT({
+    shiny::validate(shiny::need(rv$groups, "Click 'Compute'."))
+    DT::datatable(sig3(summary_groups(rv$groups)), rownames = FALSE,
+                  options = list(dom = "t", scrollX = TRUE))
   })
-  output$nn_plot <- shiny::renderPlot(nn_plot_r(), res = 96)
-  output$nn_assemblage <- DT::renderDT({
-    shiny::req(rv$nonnative$assemblage)
-    a <- rv$nonnative$assemblage
-    keep <- intersect(c("space", "n_native", "n_nonnative", "FRic_hist", "FRic_cur", "FRic_change_rel",
-                        "d_FDis", "d_FOri", "d_MPD", "p_nn_outside", "ses_FRic", "p_FRic",
-                        "ses_FDis", "p_FDis"), names(a))
-    DT::datatable(sig3(a[, keep]), rownames = FALSE, options = list(dom = "t", scrollX = TRUE))
+  output$grp_focal_summary_ui <- shiny::renderUI({
+    if (is.null(rv$groups$focal)) return(NULL)
+    shiny::tagList(shiny::tags$h6(sprintf("Focal groups relative to the reference (%s)",
+                                          rv$groups$settings$reference), style = "margin-top: 1rem;"),
+                   DT::DTOutput("grp_focal_summary"))
   })
-  output$nn_species_table <- DT::renderDT({
-    shiny::req(rv$nonnative)
-    DT::datatable(sig3(rv$nonnative$nonnative), rownames = FALSE,
-                  options = list(pageLength = 10, scrollX = TRUE))
+  output$grp_focal_summary <- DT::renderDT({
+    shiny::req(rv$groups$focal)
+    DT::datatable(sig3(summary_groups(rv$groups, "focal")), rownames = FALSE,
+                  options = list(dom = "tp", pageLength = 12, scrollX = TRUE))
   })
-  output$nn_native_table <- DT::renderDT({
-    shiny::req(rv$nonnative)
-    DT::datatable(sig3(rv$nonnative$native), rownames = FALSE,
-                  options = list(pageLength = 10, scrollX = TRUE))
+  grp_plot_r <- shiny::reactive({
+    shiny::req(rv$groups, input$grp_space %in% names(rv$spaces))
+    s <- rv$spaces[[input$grp_space]]; set <- rv$grp_set
+    ax <- c(input$grp_ax1, input$grp_ax2)
+    shiny::validate(shiny::need(max(ax) <= ncol(s$coords), sprintf("This space has %d axes.", ncol(s$coords))),
+                    shiny::need(ax[1] != ax[2], "Choose two different axes."))
+    x <- rv$groups
+    if (!is.null(set$reference) && !is.null(x$focal)) {
+      r <- list(focal = x$focal[x$focal$space == input$grp_space, -1],
+                settings = list(hull_axes = min(input$grp_hull_axes, ncol(s$coords))))
+      plot_groups(s, set$groups, axes = ax, sep = set$sep, recode = set$recode, levels = set$levels,
+                  reference = set$reference, pool_focal = isTRUE(input$grp_pool), x = r, label = 5)
+    } else plot_groups(s, set$groups, axes = ax, sep = set$sep, recode = set$recode, levels = set$levels,
+                       contours = isTRUE(input$grp_contours))
+  })
+  output$grp_plot <- shiny::renderPlot(grp_plot_r(), res = 96)
+  output$grp_overlap_plot <- shiny::renderPlot({
+    shiny::req(rv$groups)
+    p <- rv$groups$pairs
+    shiny::validate(shiny::need(!is.null(p) && nrow(p), "Needs at least two groups."),
+                    shiny::need(input$grp_pair_metric %in% names(p),
+                                "Not computed: choose the 'Permute group labels' null model."))
+    plot_group_overlap(rv$groups, input$grp_pair_metric)
+  }, res = 96)
+  output$grp_groups_table <- DT::renderDT({ shiny::req(rv$groups); dt_page(rv$groups$groups) })
+  output$grp_pairs_table <- DT::renderDT({ shiny::req(rv$groups$pairs); dt_page(rv$groups$pairs) })
+  output$grp_species_table <- DT::renderDT({ shiny::req(rv$groups); dt_page(rv$groups$species) })
+  output$grp_focal_table <- DT::renderDT({
+    shiny::validate(shiny::need(rv$groups$focal, "Choose a reference group to analyse focal species."))
+    dt_page(rv$groups$focal)
+  })
+  output$grp_ref_table <- DT::renderDT({
+    shiny::validate(shiny::need(rv$groups$reference, "Choose a reference group."))
+    dt_page(rv$groups$reference)
+  })
+  output$grp_contrib_table <- DT::renderDT({
+    shiny::validate(shiny::need(rv$groups$contribution, "Choose a reference group."))
+    dt_page(rv$groups$contribution)
   })
 
   # ---- 8. export -------------------------------------------------------------
@@ -1002,10 +1362,13 @@ app_server <- function(input, output, session) {
     list(data_file = data_name(), trait_info_file = "trait_info.csv",
          species_col = input$species_col,
          iucn_col = if (isTRUE(nzchar(input$iucn_col))) input$iucn_col else NULL,
-         status_col = if (isTRUE(nzchar(input$status_col))) input$status_col else NULL,
-         native_label = if (is.null(input$nn_native)) "native" else input$nn_native,
-         hull_axes = if (is.null(input$nn_hull_axes)) 4 else input$nn_hull_axes,
-         sep = input$sep, missing = input$missing,
+         group_col = if (isTRUE(nzchar(input$grp_col)) && !identical(input$grp_src, "simulate"))
+           input$grp_col else NULL,
+         group_cols = input$group_cols,
+         group_reference = rv$grp_set$reference, group_sep = rv$grp_set$sep,
+         group_recode = rv$grp_set$recode, group_levels = rv$grp_set$levels,
+         hull_axes = if (is.null(input$grp_hull_axes)) 4 else input$grp_hull_axes,
+         sep = read_sep()$sep, dec = read_sep()$dec, missing = input$missing,
          phylo_file = rv$phylo_name, n_phylo_axes = input$n_phylo, ntree = input$ntree,
          cov_cols = if (identical(input$missing, "impute")) names(cov_data()) else NULL,
          seed = input$seed, spaces = lapply(rv$spaces, `[[`, "dimensions"),
@@ -1032,19 +1395,32 @@ app_server <- function(input, output, session) {
     content = function(file) { shiny::req(rv$cmp); utils::write.csv(rv$cmp$table, file, row.names = FALSE) })
   output$dl_metrics <- shiny::downloadHandler(filename = "species_metrics.csv",
     content = function(file) { shiny::req(rv$metrics); utils::write.csv(rv$metrics, file, row.names = FALSE) })
-  output$dl_nonnative <- shiny::downloadHandler(filename = "nonnative_species.csv",
+  output$dl_nonnative <- shiny::downloadHandler(filename = "species_groups.zip",
     content = function(file) {
-      shiny::req(rv$nonnative)
-      a <- rv$nonnative$nonnative; a$group <- "non-native"
-      b <- rv$nonnative$native; b$group <- "native"
-      cols <- union(names(a), names(b))
-      a[setdiff(cols, names(a))] <- NA; b[setdiff(cols, names(b))] <- NA
-      utils::write.csv(rbind(a[cols], b[cols]), file, row.names = FALSE)
+      shiny::req(!is.null(rv$groups) || !is.null(rv$covariate))
+      d <- tempfile("groups_"); dir.create(d)
+      x <- rv$groups
+      if (!is.null(rv$covariate)) {
+        utils::write.csv(rv$covariate$summary, file.path(d, "continuous_summary.csv"), row.names = FALSE)
+        utils::write.csv(rv$covariate$species, file.path(d, "continuous_species.csv"), row.names = FALSE)
+      }
+      tabs <- if (is.null(x)) list() else list(groups_summary = summary_groups(x), groups = x$groups, pairs = x$pairs,
+                   tests = x$test, species_mixing = x$species, focal_summary =
+                     if (!is.null(x$focal)) summary_groups(x, "focal"),
+                   focal_species = x$focal, reference_species = x$reference,
+                   contribution = x$contribution, assemblages = x$sites)
+      tabs <- tabs[!vapply(tabs, is.null, logical(1))]
+      f <- file.path(d, paste0(names(tabs), ".csv"))
+      for (i in seq_along(tabs)) utils::write.csv(tabs[[i]], f[i], row.names = FALSE)
+      f <- list.files(d, full.names = TRUE)
+      if (requireNamespace("zip", quietly = TRUE)) zip::zip(file, basename(f), root = d) else
+        utils::zip(file, f, flags = "-j9X")
     })
   output$dl_rds <- shiny::downloadHandler(filename = "functional_spaces_results.rds",
     content = function(file) saveRDS(list(trait_info = current_ti(), traits = traits_used(),
                                           spaces = rv$spaces, comparison = rv$cmp,
-                                          metrics = rv$metrics, nonnative = rv$nonnative), file))
+                                          metrics = rv$metrics, extinction = rv$extinction,
+                                          groups = rv$groups, continuous = rv$covariate), file))
   # ---- home page and progress through the steps ----------------------------
   shiny::observeEvent(input$go_tab, bslib::nav_select("nav", input$go_tab))
   shiny::observeEvent(input$home_example, {
@@ -1058,7 +1434,7 @@ app_server <- function(input, output, session) {
   steps_done <- shiny::reactive({
     d <- tryCatch(raw(), error = function(e) NULL)
     c(!is.null(d), !is.null(rv$traits), !is.null(rv$traits_final), !is.null(rv$spaces),
-      !is.null(rv$cmp), !is.null(rv$metrics), !is.null(rv$nonnative),
+      !is.null(rv$cmp), !is.null(rv$metrics), !is.null(rv$groups) || !is.null(rv$covariate),
       isTRUE(!is.null(rv$prj_result$zip)))
   })
   next_step <- shiny::reactive({
@@ -1114,15 +1490,24 @@ app_server <- function(input, output, session) {
 
   # ---- 8. reproducible project ----------------------------------------------
   prj_steps <- shiny::reactive(c(if (!is.null(rv$cmp)) "compare", if (!is.null(rv$metrics)) "metrics",
-                                 if (!is.null(rv$nonnative)) "nonnative"))
+                                 if (!is.null(rv$groups) || !is.null(rv$covariate)) "groups"))
   prj_params <- shiny::reactive({
     p <- script_params()
     p$top <- if (is.null(input$top)) 0.1 else input$top
-    p$nonnative <- if (!is.null(rv$nonnative)) list(
-      source = if (identical(input$nn_src, "simulate")) "simulate" else "column",
-      native = rv$nn_native_label, prop = input$nn_prop, bias = input$nn_bias,
-      sim_space = input$nn_sim_space, hull_axes = input$nn_hull_axes,
-      null = input$nn_null, nrep = input$nn_nrep)
+    p$groups <- if (!is.null(rv$groups)) {
+      set <- rv$grp_set
+      list(source = set$source, col = set$col, sep = set$sep, recode = set$recode, levels = set$levels,
+           reference = set$reference, pool_focal = isTRUE(input$grp_pool),
+           prop = input$nn_prop, bias = input$nn_bias, sim_space = input$nn_sim_space,
+           hull_axes = input$grp_hull_axes, null = input$grp_null, nrep = input$grp_nrep,
+           density = set$density, density_axes = set$density_axes, bw = set$bw,
+           abundance_col = set$abundance_col,
+           sites = if (!is.null(set$sites)) set$sites[c("site_col", "species_col", "group_col")])
+    }
+    p$covariate <- if (!is.null(rv$covariate)) list(col = rv$cov_set$col, transform = rv$cov_set$transform,
+      fit_axes = input$cov_fit_axes, nperm = input$cov_nperm)
+    p$extinction <- if (!is.null(rv$extinction)) list(steps = input$ext_steps, nrep = input$ext_nrep,
+      hull_axes = if (is.null(input$grp_hull_axes)) 4 else input$grp_hull_axes)
     p
   })
   prj_name <- shiny::reactive({
@@ -1141,6 +1526,7 @@ app_server <- function(input, output, session) {
     prev_preview <<- tempfile("prj_preview_")
     dir <- file.path(prev_preview, nm)
     tryCatch(write_analysis_project(d, ti, dir, params = p, phylo = prj_phylo(), steps = st,
+                                    assemblages = if (!is.null(rv$groups)) rv$grp_set$sites$data,
                                     title = input$prj_title, author = input$prj_author,
                                     data_source = data_name(), run = FALSE, zip = FALSE, quiet = TRUE),
              error = function(e) { notify_error(e); NULL })
@@ -1160,7 +1546,7 @@ app_server <- function(input, output, session) {
                                         if (!is.null(rv$spaces)) sprintf(": %s", paste(names(rv$spaces), collapse = ", ")) else "")),
       item("compare" %in% st, "Procrustes tests (tab 5)"),
       item("metrics" %in% st, "Species metrics (tab 6)"),
-      item("nonnative" %in% st, "Non-native species (tab 7)")),
+      item("groups" %in% st, "Species groups (tab 7)")),
       if (is.null(rv$spaces)) shiny::tags$p(class = "hint", "Build the spaces (tab 4) first."))
   })
   output$prj_run_hint <- shiny::renderUI({
@@ -1181,6 +1567,7 @@ app_server <- function(input, output, session) {
     dir <- file.path(base, prj_name())
     args <- list(data = raw(), trait_info = current_ti(), dir = dir, params = prj_params(),
                  phylo = if (!is.null(prj_phylo())) ape::read.tree(prj_phylo()), steps = prj_steps(),
+                 assemblages = if (!is.null(rv$groups)) rv$grp_set$sites$data,
                  title = input$prj_title, author = input$prj_author, data_source = data_name(),
                  run = isTRUE(input$prj_run), zip = TRUE, quiet = TRUE)
     rv$prj_result <- NULL; rv$prj_dir <- dir

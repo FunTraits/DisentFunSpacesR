@@ -1,7 +1,7 @@
 Package: DisentFunSpaces
 Type: Package
 Title: Build and Compare Functional Spaces from Mixed-Type Trait Data
-Version: 0.7.0
+Version: 0.8.0
 Authors@R: c(
     person("Aurèle", "Toussaint", email = "aurele.toussaint@cnrs.fr",
            role = c("aut", "cre")),
@@ -18,9 +18,13 @@ Description: Generalises the framework of Toussaint et al. (2026, Ecography,
     al. 2009, <doi:10.1111/j.1600-0706.2008.16668.x>) followed by a Principal
     Coordinates Analysis. Spaces are compared with Procrustes tests, and
     species-level functional uniqueness (FUn), specialisation (FSp) and FUSE
-    are computed in each space. Non-native species are positioned relative
-    to the native fauna (functional novelty, loss of native uniqueness,
-    change in functional richness with null models). A 'shiny' application exposes the full
+    are computed in each space. Groups of species defined by any categorical
+    attribute that is not a trait (origin, human uses, migration, threat
+    status...) are compared in each space (convex hull overlap and functional
+    beta diversity, Villeger et al. 2013, <doi:10.1111/geb.12021>; PERMANOVA),
+    and the species of focal groups are positioned relative to a reference
+    group (e.g. non-native relative to native species: functional novelty,
+    loss of uniqueness, change in functional richness with null models). A 'shiny' application exposes the full
     workflow, and the whole analysis can be exported as a reproducible project
     (data, numbered scripts, parameters, results and a Methods and Results report). Example data: observed traits of 2000 bird species, described by the traits of
     Toussaint et al. (2026), from AVONET

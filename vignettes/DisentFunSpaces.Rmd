@@ -210,9 +210,82 @@ as.data.frame(top, check.names = FALSE)
 compare_metrics(m, "FUn", top = 0.1)$pairs
 ```
 
-## 6. Non-native species
+## 6. Species groups
 
-The bird data have no native/non-native status, so introductions are
+Any categorical attribute of species that is not a trait can define groups:
+origin (native / non-native), human uses, migratory behaviour, activity
+period, threat status, taxonomy... `groups_all()` describes, in every space,
+the functional structure of each group, the overlap of the convex hulls of
+pairs of groups (intersection / union, and the functional Jaccard
+dissimilarity split into turnover and nestedness; Villéger et al. 2013) and
+tests the separation of the groups (PERMANOVA and PERMDISP on the
+coordinates). With a `reference` group, the species of each other (focal)
+group are positioned relative to it, as non-native species relative to the
+native fauna below. Here, threatened species (IUCN VU, EN, CR) are compared
+with non-threatened species (LC, NT): are threatened birds functionally
+distinct, and how much of the functional space would their loss remove?
+
+```{r}
+iucn <- setNames(birds_traits$iucn, birds_traits$species)
+grp <- groups_all(spaces, iucn,
+                  recode = list(threatened = c("VU", "EN", "CR"),
+                                `not threatened` = c("LC", "NT")),
+                  levels = c("threatened", "not threatened"),
+                  reference = "not threatened", n_axes = 4, hull_axes = 3,
+                  null = "permute", nrep = 19, nperm = 99, seed = 1)  # more in practice
+summary_groups(grp)           # separation of the two groups in each space
+summary_groups(grp, "focal")  # threatened species relative to the others
+```
+
+`FRic_contribution_rel` is the relative gain in functional richness that
+threatened species bring to the non-threatened fauna (what their loss would
+remove), and `ses_FRic` compares it with as many species drawn at random.
+Groups need not be exclusive: a column such as `"food;aquarium"` is read with
+`sep = ";"`. Pairwise overlaps are shown across spaces by
+`plot_group_overlap()`, and the groups in one space by `plot_groups()`:
+
+```{r, fig.height = 4.5}
+plot_groups(spaces$Combined, setNames(birds_traits$order, birds_traits$species),
+            levels = c("Anseriformes", "Accipitriformes", "Strigiformes"))
+```
+
+Hulls depend on the most extreme species only; `density = TRUE` adds the
+overlap of kernel densities (`overlap_kde`), robust to outliers and
+optionally weighted by abundance (`abundance`). With `comm` (an assemblage x
+species matrix, or `community_from_long()` on a long table whose groups may
+differ between assemblages), the contribution of focal species is also
+measured within each assemblage (`grp$sites`).
+
+### Extinction scenarios
+
+Which dimension would lose most if threatened species disappeared, and more
+than expected from the number of species lost?
+
+```{r, fig.height = 3.5}
+ext <- extinction_scenarios(spaces, iucn, n_axes = 4, hull_axes = 3, steps = 5,
+                            nrep = 9, seed = 1)   # use >= 99 in practice
+ext$summary[ext$summary$metric %in% c("FRic", "FDis"), ]
+plot_extinction(ext, "FRic")
+```
+
+### Continuous variables
+
+A continuous attribute that is not a trait (range size, abundance, trend...)
+need not be cut into classes: `covariate_space()` fits it on the axes of each
+space and measures its functional autocorrelation (here body mass, used as a
+trait in the reproduction dimension only, related to the diet space):
+
+```{r}
+cv <- covariate_space(spaces["Diet"], setNames(birds_traits$body_mass, birds_traits$species),
+                      transform = "log10", nperm = 99, seed = 1)
+cv$summary
+```
+
+### Non-native species
+
+Non-native species are a particular case (`group_species(..., reference =
+"native")` gives the same values); the dedicated functions add assemblage
+x species matrices and EICAT weights. The bird data have no native/non-native status, so introductions are
 simulated here (15% of species, biased towards the periphery of the combined
 space). With real data, `status` is a named vector (`"native"` vs any other
 label, e.g. `"introduced"`), or a sites x species matrix with `comm` when a

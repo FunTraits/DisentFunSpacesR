@@ -35,6 +35,8 @@ install.packages(c("missForest", "readxl"))               # optional: imputation
 | Distance only | `trait_distance()` | `ade4::dist.ktab()` |
 | Space comparison | `compare_spaces()`, `procrustes_residuals()` | `run_procrustes()` (`ade4::procuste.rtest`) |
 | Species metrics | `species_metrics_all()`, `compare_metrics()` | `calc_fuse_noINS()` (FUn, FSp, FUSE) |
+| Species groups (any categorical attribute that is not a trait: origin, uses, migration, threat...) | `groups_all()`, `group_overlap()`, `group_species()`, `group_contribution()`, `summary_groups()`, `plot_groups()`, `plot_group_overlap()` | hull overlap / functional beta diversity (Villéger et al. 2013), PERMANOVA, focal vs reference group |
+| Densities, extinctions, continuous variables, assemblages | `group_overlap(density = TRUE)`, `extinction_scenarios()`, `plot_extinction()`, `covariate_space()`, `plot_covariate()`, `group_assemblage()`, `community_from_long()` | kernel-density overlap (Carmona et al. 2016); extinction risk vs random removals; vector fitting |
 | Non-native species | `nonnative_species()`, `nonnative_assemblage()`, `nonnative_all()`, `summary_nonnative()`, `compare_nonnative()`, `simulate_introductions()` | Toussaint et al. 2018 (*Ecol. Lett.*) approach, per functional space |
 | Plots | `plot_space()`, `plot_comparison()`, `plot_procrustes()`, `plot_quality()`, `plot_eigen()` | |
 
@@ -105,7 +107,7 @@ A home page shows the workflow and how far the session has gone. Tabs:
 block, transformation, weight, ordinal levels, circular limits) — 3. Missing
 values — 4. Functional spaces (per dimension, combined, custom combinations) —
 5. Procrustes comparisons and species residuals — 6. Species metrics —
-7. Non-native species — 8. Export.
+7. Species groups — 8. Export.
 
 ### Export: a reproducible project
 
@@ -125,7 +127,7 @@ write_analysis_project(birds_traits, birds_trait_info, dir = "~/birds_spaces",
 birds_spaces/
 ├── scripts/      01_DATA_prepare_traits.R, 02_DATA_missing_values.R,
 │                 03_ANALYSIS_functional_spaces.R, 04_ANALYSIS_compare_spaces.R,
-│                 05_ANALYSIS_species_metrics.R, 06_ANALYSIS_nonnative.R
+│                 05_ANALYSIS_species_metrics.R, 06_ANALYSIS_groups.R
 ├── utils/        library.R, parameters.R (every setting, in one place), functions.R
 ├── data/         raw/ (traits.csv, trait_info.csv, phylogeny.tre), processed/, metadata.csv
 ├── results/      figures/ (Fig*, FigS*: .png + .pdf), tables/ (Table*, TableS*: .csv)
@@ -189,6 +191,17 @@ BLAS.
 * `space_quality()` reports the mean absolute deviation between functional
   distances and distances in the first *k* axes (Maire et al. 2015) to choose
   the dimensionality of spaces.
+* Species groups: `groups_all()` takes any categorical attribute of species
+  that is not a trait (exclusive labels, several labels per species with
+  `sep`, merged labels with `recode`). Per group: hull volume, dispersion,
+  segregation of neighbours; per pair of groups: hull overlap (intersection /
+  union), functional Jaccard turnover / nestedness, proportion of species of
+  one group inside the hull of the other, distance between centroids, with
+  SES against label permutations; PERMANOVA / PERMDISP computed from the
+  coordinates. With a `reference` group, focal species are positioned
+  relative to it (novelty, reference hull, loss of uniqueness of reference
+  species, contribution to FRic, FDis, FOri, MPD): the non-native analysis
+  below, generalised.
 * Non-native species: `nonnative_species()` gives, per non-native species,
   the distance to the nearest native (`FNov`), to the native centroid
   (`FSp_native`), the position inside/outside the native convex hull and,

@@ -5,11 +5,13 @@
 #' manuscript).
 #'
 #' @param p Named list of settings (`data_file`, `trait_info_file`,
-#'   `species_col`, `iucn_col`, `sep`, `missing`, `phylo_file`,
+#'   `species_col`, `iucn_col`, `sep` (optionally `dec`), `missing`, `phylo_file`,
 #'   `n_phylo_axes`, `ntree`, `cov_cols`, `spaces`, `weighting`, `correction`,
 #'   `method`, `nrepet`, `n_axes`, `mantel`, `k`; optionally `engine`,
-#'   `eigen`, `keep_dist`, `cores` (large datasets), `status_col`,
-#'   `native_label`, `hull_axes` for non-native species).
+#'   `eigen`, `keep_dist`, `cores` (large datasets), `group_col`
+#'   (and `group_reference`, `group_sep`, `group_recode`, `group_levels`;
+#'   `status_col` / `native_label` of version 0.7.0 still accepted),
+#'   `hull_axes` for species groups).
 #' @return A character string.
 #' @export
 analysis_script <- function(p) {
@@ -21,8 +23,10 @@ analysis_script <- function(p) {
   read_data <- if (grepl("\\.xlsx?$", p$data_file, ignore.case = TRUE)) {
     sprintf('traits_raw <- as.data.frame(readxl::read_excel("%s"))', p$data_file)
   } else {
-    sprintf('traits_raw <- read.table("%s", header = TRUE, sep = "%s", quote = "\\"",\n                         stringsAsFactors = FALSE, check.names = FALSE)',
-            p$data_file, if (p$sep == "\t") "\\t" else p$sep)
+    sep <- if (is.null(p$sep) || identical(p$sep, "auto")) "," else p$sep
+    dec <- if (is.null(p$dec)) "." else p$dec
+    sprintf('traits_raw <- read.table("%s", header = TRUE, sep = "%s", dec = "%s", quote = "\\"",\n                         stringsAsFactors = FALSE, check.names = FALSE)',
+            p$data_file, if (sep == "\t") "\\t" else sep, dec)
   }
   miss <- switch(p$missing,
     keep = "# Missing values kept: handled pairwise by the generalised Gower distance",
@@ -42,17 +46,23 @@ analysis_script <- function(p) {
     sprintf('iucn <- setNames(traits_raw[["%s"]], traits_raw[["%s"]])', p$iucn_col, p$species_col)
   } else "iucn <- NULL"
   nax <- if (is.null(p$n_axes)) "NULL" else as.character(p$n_axes)
-  nn_code <- if (!is.null(p$status_col)) paste0('
+  gcol <- if (!is.null(p$group_col)) p$group_col else p$status_col
+  gref <- if (!is.null(p$group_reference)) p$group_reference else if (is.null(p$group_col) &&
+            !is.null(p$status_col)) (if (is.null(p$native_label)) "native" else p$native_label)
+  nn_code <- if (!is.null(gcol)) paste0('
 
-## 6. Non-native species
-status <- setNames(traits_raw[["', p$status_col, '"]], traits_raw[["', p$species_col, '"]])
-nn <- nonnative_all(spaces, status, native = "', if (is.null(p$native_label)) "native" else p$native_label,
-'", n_axes = ', nax, ', k = ', p$k, ',
-                    hull_axes = ', if (is.null(p$hull_axes)) 4 else p$hull_axes, ', null = "permute", nrep = 999)
-summary_nonnative(nn)
-compare_nonnative(nn, "FNov", top = 0.1)$pairs
-plot_nonnative(spaces[["', utils::tail(names(p$spaces), 1), '"]], status, native = "',
-if (is.null(p$native_label)) "native" else p$native_label, '")
+## 6. Species groups (any categorical attribute that is not a trait)
+groups <- setNames(traits_raw[["', gcol, '"]], traits_raw[["', p$species_col, '"]])
+grp <- groups_all(spaces, groups, reference = ', .dep(gref), ', sep = ', .dep(p$group_sep),
+', recode = ', .dep(p$group_recode), ',
+                  levels = ', .dep(p$group_levels), ', n_axes = ', nax, ', k = ', p$k, ',
+                  hull_axes = ', if (is.null(p$hull_axes)) 4 else p$hull_axes, ', null = "permute", nrep = 99)
+summary_groups(grp)', if (!is.null(gref)) '
+summary_groups(grp, "focal")', '
+plot_group_overlap(grp)
+plot_groups(spaces[["', utils::tail(names(p$spaces), 1), '"]], groups, sep = ', .dep(p$group_sep),
+', recode = ', .dep(p$group_recode), ', levels = ', .dep(p$group_levels),
+if (!is.null(gref)) paste0(', reference = ', .dep(gref)), ')
 ') else ""
 
   paste0(

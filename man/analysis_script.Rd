@@ -8,11 +8,13 @@ analysis_script(p)
 }
 \arguments{
 \item{p}{Named list of settings (`data_file`, `trait_info_file`,
-`species_col`, `iucn_col`, `sep`, `missing`, `phylo_file`,
+`species_col`, `iucn_col`, `sep` (optionally `dec`), `missing`, `phylo_file`,
 `n_phylo_axes`, `ntree`, `cov_cols`, `spaces`, `weighting`, `correction`,
 `method`, `nrepet`, `n_axes`, `mantel`, `k`; optionally `engine`,
-`eigen`, `keep_dist`, `cores` (large datasets), `status_col`,
-`native_label`, `hull_axes` for non-native species).}
+`eigen`, `keep_dist`, `cores` (large datasets), `group_col`
+(and `group_reference`, `group_sep`, `group_recode`, `group_levels`;
+`status_col` / `native_label` of version 0.7.0 still accepted),
+`hull_axes` for species groups).}
 }
 \value{
 A character string.

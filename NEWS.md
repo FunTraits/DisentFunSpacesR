@@ -1,3 +1,88 @@
+# DisentFunSpaces 0.8.0
+
+## Species groups (generalises the non-native analysis)
+
+* New functions for groups of species defined by any categorical attribute
+  that is not a trait (origin, human uses, migratory behaviour, activity
+  period, threat status, taxonomy...): `groups_all()`, `group_overlap()`,
+  `group_species()`, `group_contribution()`, `summary_groups()`,
+  `plot_groups()`, `plot_group_overlap()`. Groups may be exclusive or not
+  (several labels per species, `sep`), labels can be merged (`recode`) and
+  selected (`levels`).
+* Group level: hull volume (FRic), FDis, FOri, MPD, share of the hull not
+  shared with the other species, segregation of nearest neighbours; pairwise
+  hull overlap (intersection / union, with `geometry::intersectn()`),
+  functional Jaccard dissimilarity and its turnover / nestedness components
+  (Villeger et al. 2013), proportion of species of one group inside the hull
+  of the other, distance between centroids; SES against permutations of the
+  labels; PERMANOVA and PERMDISP computed from the Euclidean coordinates
+  (same values as `vegan::adonis2()` / `betadisper()`, checked in the tests,
+  permutations in O(n p)).
+* Species level, relative to a reference group: the metrics of
+  `nonnative_species()` / `nonnative_assemblage()` for each focal group
+  (`FNov`, `FSp_ref`, `inside_ref_hull`, `dFUn_rel`, contribution of the
+  focal group), with optional weights (`FUSW`). `nonnative_*()` are
+  unchanged and give the same values with `reference = "native"`.
+
+## Densities, extinction scenarios, continuous variables, assemblages
+
+* `group_overlap()` / `groups_all()`: `density = TRUE` adds the overlap of
+  kernel densities of the groups (`overlap_kde`, sum of the minimum of the
+  two densities, as the TPD overlap of Carmona et al. 2016; robust to outlying
+  species, unlike hulls) and `FRic_kde`, on a grid of 2-4 axes with one
+  bandwidth for all groups of a space, optionally weighted by abundance
+  (`abundance`), with SES under the null model. `plot_groups(contours = TRUE)`
+  draws density contours.
+* `extinction_scenarios()`, `plot_extinction()`: species removed by
+  decreasing extinction probability (IUCN categories -> EDGE2 probabilities,
+  or any probability / priority such as FUSE) vs at random, up to the number
+  of threatened species, with FRic, FDis, FOri and MPD relative to all
+  species; stochastic extinctions drawn with the probabilities. Which
+  dimension loses most, and more than expected from species richness?
+* `covariate_space()`, `plot_covariate()`: a continuous variable that is not
+  a trait (range size, abundance, trend, economic value...) in every space:
+  linear fit on the first axes (vector fitting) with permutation test,
+  functional autocorrelation (correlation with the mean of the k nearest
+  neighbours, also for non-linear structure), Spearman correlations with FUn
+  and FSp.
+* `group_assemblage()`, `community_from_long()`, `plot_group_sites()`,
+  `groups_all(comm =)`: contribution of focal groups within each assemblage,
+  with groups that may differ between assemblages (native in one basin,
+  introduced in another); same values as `nonnative_assemblage()` for
+  non-native species (checked in the tests).
+
+## Shiny application
+
+* Tab 6: "Extinction scenarios" card (needs the IUCN column).
+* Tab 7: three modes (categories, continuous variable, simulated status);
+  kernel-density overlap with optional abundance weights; density contours
+  on the plot; assemblages from a long table (assemblage, species, optional
+  group per assemblage) with an "Assemblages" result tab.
+* The exported project archives the assemblages (`data/raw/assemblages.csv`)
+  and runs the new analyses (Table8-9, TableS10-S13, Fig6-8), described in
+  the Methods paragraph of the report.
+* Tab 7 "Non-native species" becomes "Species groups": grouping variables
+  are declared in tab 1 (several columns, not used as traits; the IUCN column
+  is also offered), one is analysed at a time, with an optional separator of
+  multiple labels, a box to merge labels (`threatened = VU, EN, CR`), the
+  groups analysed and an optional reference group. Results: separation of
+  the groups in each space, focal groups relative to the reference, plot of
+  the groups (or of the focal species against the reference hull), heat map
+  of pairwise overlaps across spaces, and tables (groups, pairs, species
+  mixing, focal and reference species, contribution). The simulated
+  native / non-native status remains available for exploration.
+* Exported project: `06_ANALYSIS_groups.R` replaces `06_ANALYSIS_nonnative.R`
+  (step `"groups"`; `"nonnative"` and the 0.7.0 settings `status_col` /
+  `nonnative` are still accepted and translated); new tables Table5-7 and
+  TableS6-S9, figures Fig4_groups_* and Fig5_group_overlap, and the Methods
+  paragraph of the report.
+* Data tab: the separator of text files is now detected automatically
+  ("Auto-detect", default; comma, semicolon, tab or pipe) together with the
+  decimal mark (decimal comma of European CSV files). A file read as a
+  single column with the separator chosen by hand is read again with the
+  detected one; the preview reports the separator used, which is also
+  written into the exported script.
+
 # DisentFunSpaces 0.7.0
 
 ## Shiny application

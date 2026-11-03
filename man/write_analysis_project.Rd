@@ -10,6 +10,7 @@ write_analysis_project(
   dir,
   params = list(),
   phylo = NULL,
+  assemblages = NULL,
   steps = c("compare", "metrics"),
   title = "Functional spaces analysis",
   author = "",
@@ -21,7 +22,7 @@ write_analysis_project(
 }
 \arguments{
 \item{data}{Trait table (data frame, one row per species), as given to
-[prepare_traits()]. It may hold further columns (IUCN category, status,
+[prepare_traits()]. It may hold further columns (IUCN category, grouping variables,
 predictors of missing values); they are archived with it.}
 
 \item{trait_info}{Trait-description table (see [check_trait_info()]).}
@@ -30,23 +31,38 @@ predictors of missing values); they are archived with it.}
 Its name is the project name.}
 
 \item{params}{Named list of settings, with the names used by
-[analysis_script()]: `species_col`, `iucn_col`, `status_col`,
+[analysis_script()]: `species_col`, `iucn_col`,
 `missing` (`"keep"`, `"drop"`, `"impute"`), `cov_cols`,
 `n_phylo_axes`, `ntree`, `seed`, `spaces` (named list of dimensions),
 `weighting`, `correction`, `max_axes`, `engine`, `eigen`, `keep_dist`,
 `method`, `nrepet`, `n_axes`, `mantel`, `cores`, `k`, and also `top`
 (proportion of species of the top sets, default 0.1), `coords_axes`
-(axes in the coordinate table, default 10) and `nonnative` (list:
-`source` = `"column"` or `"simulate"`, `native`, `prop`, `bias`,
-`sim_space`, `hull_axes`, `null`, `nrep`). Missing settings take the
-defaults of the published analysis.}
+(axes in the coordinate table, default 10) and `groups` (list:
+`source` = `"column"` or `"simulate"`, `col` (grouping column), `sep`,
+`recode`, `levels`, `reference`, `pool_focal`, `prop`, `bias`,
+`sim_space`, `hull_axes`, `null`, `nrep`, `nperm`, `density`,
+`density_axes`, `bw`, `abundance_col`, `sites`; see [groups_all()]),
+`covariate` (continuous variable that is not a trait: list `col`,
+`transform`, `fit_axes`, `nperm`; see [covariate_space()]) and
+`extinction` (with the metrics step and an IUCN column: list `steps`,
+`nrep`, `hull_axes`; see [extinction_scenarios()]).
+The settings of version 0.7.0 (`status_col` and `nonnative` = list(`source`,
+`native`, ...)) are still accepted and translated (reference = native
+label). Missing settings take the defaults of the published analysis.}
 
 \item{phylo}{Optional phylogeny (`phylo` object or Newick file) used to
 impute missing values; archived as `data/raw/phylogeny.tre`.}
 
+\item{assemblages}{Optional long table of assemblages (one row per
+species in an assemblage; see [community_from_long()]), used by the
+species-groups step when `params$groups$sites` gives its columns
+(`site_col`, `species_col`, `group_col`); archived as
+`data/raw/assemblages.csv`.}
+
 \item{steps}{Optional analyses included after the spaces: any of
 `"compare"` (Procrustes tests), `"metrics"` (FUn, FSp, FUSE) and
-`"nonnative"` (none: `character(0)`).}
+`"groups"` (species groups, [groups_all()]; `"nonnative"` is an alias)
+(none: `character(0)`).}
 
 \item{title, author}{Title and author(s), used in the README and report.}
 
@@ -79,7 +95,7 @@ The project contains:
 |-- scripts/      00_START_GeneralScript.R, 01_DATA_prepare_traits.R,
 |                 02_DATA_missing_values.R, 03_ANALYSIS_functional_spaces.R,
 |                 04_ANALYSIS_compare_spaces.R, 05_ANALYSIS_species_metrics.R,
-|                 06_ANALYSIS_nonnative.R (the steps requested), setup_environment.R
+|                 06_ANALYSIS_groups.R (the steps requested), setup_environment.R
 |-- utils/        library.R, parameters.R (every setting), functions.R
 |-- data/raw/     traits.csv, trait_info.csv (+ phylogeny.tre)
 |-- data/processed/  objects passed between scripts (.rds)

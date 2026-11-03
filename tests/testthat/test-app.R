@@ -17,11 +17,43 @@ test_that("app server runs the full workflow on the example data", {
     expect_true("FUSE" %in% names(rv$metrics))
     session$setInputs(n_phylo = 10, ntree = 100, seed = 1)
     expect_true(grepl("build_spaces", analysis_script(script_params())))
-    session$setInputs(nn_src = "simulate", nn_prop = 0.1, nn_bias = "peripheral",
-                      nn_sim_space = "Combined", nn_hull_axes = 3, nn_null = "permute",
-                      nn_nrep = 9, run_nonnative = 1)
-    expect_s3_class(rv$nonnative, "fs_nonnative_all")
-    expect_setequal(unique(rv$nonnative$nonnative$space), names(rv$spaces))
+    session$setInputs(grp_src = "simulate", nn_prop = 0.1, nn_bias = "peripheral",
+                      nn_sim_space = "Combined", grp_ref = "native", grp_hull_axes = 3,
+                      grp_null = "permute", grp_nrep = 9, run_groups = 1)
+    expect_s3_class(rv$groups, "fs_groups_all")
+    expect_setequal(unique(rv$groups$focal$space), names(rv$spaces))
+    expect_equal(unique(rv$groups$focal$group), "non-native")
+    # any grouping column: taxonomic order, groups only then with a reference
+    session$setInputs(group_cols = c("order", "family"), grp_src = "column", grp_col = "order",
+                      grp_sep = "", grp_recode = "")
+    expect_true("Passeriformes" %in% names(grp_counts()$n))
+    session$setInputs(grp_levels = c("Anseriformes", "Accipitriformes", "Strigiformes"),
+                      grp_ref = character(0), grp_null = "none", run_groups = 2)
+    expect_equal(nrow(rv$groups$pairs), 3 * length(rv$spaces))
+    expect_null(rv$groups$focal)
+    expect_true(all(is.finite(rv$groups$test$permanova_R2)))
+    # threat status merged with the recoding box, reference = not threatened
+    session$setInputs(grp_col = "iucn", grp_recode = "threatened = VU, EN, CR\nnot threatened = LC, NT")
+    expect_setequal(names(grp_counts()$n), c("threatened", "not threatened"))
+    session$setInputs(grp_levels = c("threatened", "not threatened"), grp_ref = "not threatened",
+                      run_groups = 3)
+    expect_equal(unique(rv$groups$focal$group), "threatened")
+    expect_false(is.null(rv$groups$contribution))
+    expect_equal(prj_params()$groups$recode$threatened, c("VU", "EN", "CR"))
+    expect_equal(prj_params()$groups$reference, "not threatened")
+    # densities
+    session$setInputs(grp_density = TRUE, grp_density_axes = 2, grp_bw = 1, grp_abund = "", run_groups = 4)
+    expect_true("overlap_kde" %in% names(rv$groups$pairs))
+    expect_true(prj_params()$groups$density)
+    # continuous variable
+    session$setInputs(group_cols = c("order", "Eigen.1"), grp_src = "continuous", grp_col = "Eigen.1",
+                      cov_transform = "none", cov_fit_axes = 3, cov_nperm = 19, run_groups = 5)
+    expect_s3_class(rv$covariate, "fs_covariate")
+    expect_equal(prj_params()$covariate$col, "Eigen.1")
+    # extinction scenarios (tab 6)
+    session$setInputs(ext_steps = 3, ext_nrep = 5, ext_metric = "FRic", run_ext = 1)
+    expect_s3_class(rv$extinction, "fs_extinction")
+    expect_equal(prj_params()$extinction$nrep, 5)
   })
 })
 
@@ -132,4 +164,20 @@ test_that("app home page and export tab follow the session", {
     expect_named(e$PARAMS$spaces, c("Diet", "Locomotion", "Combined"))
     expect_equal(e$PARAMS$missing, "drop")
   })
+})
+
+test_that("separator and decimal mark of text files are detected", {
+  f <- tempfile(fileext = ".csv")
+  writeLines(c("Species;Family;REs;VEp", "A a;Cyprinidae;0.138;0.21", "B b;Cichlidae;0.131;0.22"), f)
+  d <- DisentFunSpaces:::.read_table_fast(f, "auto")
+  expect_equal(ncol(d), 4); expect_equal(attr(d, "sep"), ";"); expect_true(is.numeric(d$REs))
+  # wrong separator chosen by the user: read again with the detected one
+  d <- DisentFunSpaces:::.read_table_fast(f, ",")
+  expect_equal(ncol(d), 4)
+  # decimal comma
+  writeLines(c("Species;REs;VEp", "A a;0,138;0,21", "B b;1,5;2,25"), f)
+  d <- DisentFunSpaces:::.read_table_fast(f, "auto")
+  expect_equal(attr(d, "dec"), ","); expect_equal(d$REs, c(0.138, 1.5))
+  writeLines(c("Species\tREs", "A a\t0.1"), f)
+  expect_equal(attr(DisentFunSpaces:::.read_table_fast(f, "auto"), "sep"), "\t")
 })

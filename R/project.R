@@ -13,7 +13,7 @@
 #' |-- scripts/      00_START_GeneralScript.R, 01_DATA_prepare_traits.R,
 #' |                 02_DATA_missing_values.R, 03_ANALYSIS_functional_spaces.R,
 #' |                 04_ANALYSIS_compare_spaces.R, 05_ANALYSIS_species_metrics.R,
-#' |                 06_ANALYSIS_nonnative.R (the steps requested), setup_environment.R
+#' |                 06_ANALYSIS_groups.R (the steps requested), setup_environment.R
 #' |-- utils/        library.R, parameters.R (every setting), functions.R
 #' |-- data/raw/     traits.csv, trait_info.csv (+ phylogeny.tre)
 #' |-- data/processed/  objects passed between scripts (.rds)
@@ -24,27 +24,41 @@
 #' }
 #'
 #' @param data Trait table (data frame, one row per species), as given to
-#'   [prepare_traits()]. It may hold further columns (IUCN category, status,
+#'   [prepare_traits()]. It may hold further columns (IUCN category, grouping variables,
 #'   predictors of missing values); they are archived with it.
 #' @param trait_info Trait-description table (see [check_trait_info()]).
 #' @param dir Folder of the project (created; must not exist or be empty).
 #'   Its name is the project name.
 #' @param params Named list of settings, with the names used by
-#'   [analysis_script()]: `species_col`, `iucn_col`, `status_col`,
+#'   [analysis_script()]: `species_col`, `iucn_col`,
 #'   `missing` (`"keep"`, `"drop"`, `"impute"`), `cov_cols`,
 #'   `n_phylo_axes`, `ntree`, `seed`, `spaces` (named list of dimensions),
 #'   `weighting`, `correction`, `max_axes`, `engine`, `eigen`, `keep_dist`,
 #'   `method`, `nrepet`, `n_axes`, `mantel`, `cores`, `k`, and also `top`
 #'   (proportion of species of the top sets, default 0.1), `coords_axes`
-#'   (axes in the coordinate table, default 10) and `nonnative` (list:
-#'   `source` = `"column"` or `"simulate"`, `native`, `prop`, `bias`,
-#'   `sim_space`, `hull_axes`, `null`, `nrep`). Missing settings take the
-#'   defaults of the published analysis.
+#'   (axes in the coordinate table, default 10) and `groups` (list:
+#'   `source` = `"column"` or `"simulate"`, `col` (grouping column), `sep`,
+#'   `recode`, `levels`, `reference`, `pool_focal`, `prop`, `bias`,
+#'   `sim_space`, `hull_axes`, `null`, `nrep`, `nperm`, `density`,
+#'   `density_axes`, `bw`, `abundance_col`, `sites`; see [groups_all()]),
+#'   `covariate` (continuous variable that is not a trait: list `col`,
+#'   `transform`, `fit_axes`, `nperm`; see [covariate_space()]) and
+#'   `extinction` (with the metrics step and an IUCN column: list `steps`,
+#'   `nrep`, `hull_axes`; see [extinction_scenarios()]).
+#'   The settings of version 0.7.0 (`status_col` and `nonnative` = list(`source`,
+#'   `native`, ...)) are still accepted and translated (reference = native
+#'   label). Missing settings take the defaults of the published analysis.
+#' @param assemblages Optional long table of assemblages (one row per
+#'   species in an assemblage; see [community_from_long()]), used by the
+#'   species-groups step when `params$groups$sites` gives its columns
+#'   (`site_col`, `species_col`, `group_col`); archived as
+#'   `data/raw/assemblages.csv`.
 #' @param phylo Optional phylogeny (`phylo` object or Newick file) used to
 #'   impute missing values; archived as `data/raw/phylogeny.tre`.
 #' @param steps Optional analyses included after the spaces: any of
 #'   `"compare"` (Procrustes tests), `"metrics"` (FUn, FSp, FUSE) and
-#'   `"nonnative"` (none: `character(0)`).
+#'   `"groups"` (species groups, [groups_all()]; `"nonnative"` is an alias)
+#'   (none: `character(0)`).
 #' @param title,author Title and author(s), used in the README and report.
 #' @param data_source Name of the original data file (for the README).
 #' @param run Run the project's scripts (`run_all.R`, in a separate R
@@ -69,7 +83,7 @@
 #' list.files(res$dir, recursive = TRUE)
 #' }
 write_analysis_project <- function(data, trait_info, dir, params = list(),
-                                   phylo = NULL, steps = c("compare", "metrics"),
+                                   phylo = NULL, assemblages = NULL, steps = c("compare", "metrics"),
                                    title = "Functional spaces analysis", author = "",
                                    data_source = NULL, run = TRUE, zip = TRUE,
                                    quiet = FALSE) {
@@ -77,10 +91,10 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
   data <- as.data.frame(data, stringsAsFactors = FALSE)
   if (dir.exists(dir) && length(list.files(dir, all.files = TRUE, no.. = TRUE)))
     stop("`dir` exists and is not empty: ", dir, call. = FALSE)
-  steps <- as.character(steps)
-  bad <- setdiff(steps, c("compare", "metrics", "nonnative"))
+  steps <- unique(sub("^nonnative$", "groups", as.character(steps)))
+  bad <- setdiff(steps, c("compare", "metrics", "groups"))
   if (length(bad)) stop("Unknown step(s): ", paste(bad, collapse = ", "),
-                        " (use \"compare\", \"metrics\", \"nonnative\").", call. = FALSE)
+                        " (use \"compare\", \"metrics\", \"groups\").", call. = FALSE)
   tpl <- system.file("templates", "analysis_project", package = "DisentFunSpaces")
   if (!nzchar(tpl)) stop("Templates not found in the DisentFunSpaces installation.", call. = FALSE)
 
@@ -89,10 +103,19 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
   p <- .project_params(params, ti, data, has_phylo = !is.null(phylo))
   if (!p$species_col %in% names(data))
     stop("Species column '", p$species_col, "' not found in `data`.", call. = FALSE)
-  if ("nonnative" %in% steps && is.null(p$nonnative))
-    stop("The non-native step needs `params$status_col` or `params$nonnative$source = \"simulate\"`.",
-         call. = FALSE)
-  if (!"nonnative" %in% steps) p$nonnative <- NULL
+  if ("groups" %in% steps && is.null(p$groups) && is.null(p$covariate))
+    stop("The species-groups step needs `params$groups$col` (a grouping column; for non-native ",
+         "species, the status column) or `params$groups$source = \"simulate\"`.", call. = FALSE)
+  if ("groups" %in% steps && identical(p$groups$source, "column") && !p$groups$col %in% names(data))
+    stop("Grouping column '", p$groups$col, "' not found in `data`.", call. = FALSE)
+  if (!is.null(p$covariate) && !p$covariate$col %in% names(data))
+    stop("Column '", p$covariate$col, "' not found in `data`.", call. = FALSE)
+  if (!is.null(p$groups$sites) && is.null(assemblages)) {
+    warning("`params$groups$sites` given without `assemblages`: assemblages left out.", call. = FALSE)
+    p$groups$sites <- NULL
+  }
+  if (!"groups" %in% steps) { p$groups <- NULL; p$covariate <- NULL }
+  if (!"metrics" %in% steps || is.null(p$iucn_col)) p$extinction <- NULL
   n_spaces <- length(p$spaces)
   if ("compare" %in% steps && n_spaces < 2) steps <- setdiff(steps, "compare")
 
@@ -110,6 +133,9 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     if (is.character(phylo)) phylo <- ape::read.tree(phylo)
     ape::write.tree(phylo, file.path(dir, "data/raw/phylogeny.tre"))
   }
+  if (!is.null(p$groups$sites))
+    utils::write.csv(as.data.frame(assemblages), file.path(dir, "data/raw/assemblages.csv"),
+                     row.names = FALSE, na = "", fileEncoding = "UTF-8")
   utils::write.csv(.project_metadata(), file.path(dir, "data/metadata.csv"), row.names = FALSE)
 
   # --- scripts ------------------------------------------------------------------
@@ -117,13 +143,14 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
                "03_ANALYSIS_functional_spaces.R",
                if ("compare" %in% steps) "04_ANALYSIS_compare_spaces.R",
                if ("metrics" %in% steps) "05_ANALYSIS_species_metrics.R",
-               if ("nonnative" %in% steps) "06_ANALYSIS_nonnative.R")
+               if ("groups" %in% steps) "06_ANALYSIS_groups.R")
   cran <- c("ggplot2", "ade4", "ape", "vegan",
             if (identical(p$missing, "impute")) "missForest",
             if (identical(p$eigen, "partial")) "RSpectra")
   dims <- unique(ti$dimension)
   extra <- c(if (!is.null(p$iucn_col)) sprintf("`%s` (IUCN category, for FUSE)", p$iucn_col),
-             if (!is.null(p$status_col)) sprintf("`%s` (native / non-native status)", p$status_col),
+             if (!is.null(p$groups$col)) sprintf("`%s` (species groups, not a trait)", p$groups$col),
+             if (!is.null(p$covariate$col)) sprintf("`%s` (continuous variable, not a trait)", p$covariate$col),
              if (length(p$cov_cols)) sprintf("%s (predictors of missing values, not traits)",
                                              paste0("`", p$cov_cols, "`", collapse = ", ")))
   vals <- list(
@@ -218,14 +245,14 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
   "03_ANALYSIS_functional_spaces.R" = "Gower distance + PCoA per space",
   "04_ANALYSIS_compare_spaces.R" = "Procrustes tests between spaces",
   "05_ANALYSIS_species_metrics.R" = "FUn, FSp, FUSE per space",
-  "06_ANALYSIS_nonnative.R" = "Non-native species")
+  "06_ANALYSIS_groups.R" = "Species groups (overlap, focal vs reference)")
 .PROJECT_OUTPUTS <- c(
   "01_DATA_prepare_traits.R" = "Table1_traits",
   "02_DATA_missing_values.R" = "TableS1_missing_values (+ TableS2_imputation_error)",
   "03_ANALYSIS_functional_spaces.R" = "Table2_spaces, TableS3/S4, Fig1_space_*, FigS1_inertia, FigS2_quality",
   "04_ANALYSIS_compare_spaces.R" = "Table3_procrustes, Fig2_procrustes",
-  "05_ANALYSIS_species_metrics.R" = "Table4_metric_congruence, TableS5_species_metrics, Fig3_metric_congruence",
-  "06_ANALYSIS_nonnative.R" = "Table5_nonnative_summary, Table6_assemblage_change, TableS6/S7, Fig4_nonnative_*")
+  "05_ANALYSIS_species_metrics.R" = "Table4_metric_congruence, TableS5_species_metrics, Fig3_metric_congruence (+ Table8, TableS10-S11, Fig6_extinction_*)",
+  "06_ANALYSIS_groups.R" = "Table5_groups_summary, Table6_group_pairs (+ Table7, Table9, TableS6-S13), Fig4_groups_*, Fig5_group_overlap (+ Fig7, Fig8)")
 
 # Settings completed with the defaults of the published analysis.
 .project_params <- function(p, ti, data, has_phylo = FALSE) {
@@ -240,7 +267,7 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     trait_info_file = "data/raw/trait_info.csv",
     phylo_file = if (has_phylo) "data/raw/phylogeny.tre" else NULL,
     species_col = p$species_col %||% "species",
-    iucn_col = nz(p$iucn_col), status_col = nz(p$status_col),
+    iucn_col = nz(p$iucn_col),
     seed = p$seed %||% 20251029,
     missing = p$missing %||% "keep",
     cov_cols = if (identical(p$missing, "impute")) nz(p$cov_cols) else NULL,
@@ -254,18 +281,42 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     n_axes = if (is.null(p$n_axes) || is.na(p$n_axes)) NULL else as.integer(p$n_axes),
     mantel = isTRUE(p$mantel), cores = as.integer(p$cores %||% 1),
     k = as.integer(p$k %||% 5), top = p$top %||% 0.1, coords_axes = as.integer(p$coords_axes %||% 10))
-  nn <- p$nonnative
-  if (!is.null(nn) || !is.null(out$status_col)) {
-    nn <- nn %||% list()
-    src <- nn$source %||% "column"
-    if (src == "column" && is.null(out$status_col)) nn <- NULL else
-      nn <- list(source = src, native = if (src == "simulate") "native" else nn$native %||% "native",
-                 prop = nn$prop %||% 0.1, bias = nn$bias %||% "random",
-                 sim_space = nn$sim_space %||% utils::tail(names(out$spaces), 1),
-                 hull_axes = as.integer(nn$hull_axes %||% 4), null = nn$null %||% "none",
-                 nrep = as.integer(nn$nrep %||% 99))
+  gp <- p$groups
+  # settings of version 0.7.0: status column + nonnative list
+  if (is.null(gp) && (!is.null(p$nonnative) || !is.null(nz(p$status_col)))) {
+    nn <- p$nonnative %||% list()
+    gp <- list(source = nn$source %||% "column", col = nz(p$status_col),
+               reference = nn$native %||% "native", prop = nn$prop, bias = nn$bias,
+               sim_space = nn$sim_space, hull_axes = nn$hull_axes, null = nn$null, nrep = nn$nrep)
+    if (identical(gp$null, "pool")) gp$null <- "permute"
   }
-  out$nonnative <- nn
+  if (is.null(gp) && !is.null(nz(p$group_col))) gp <- list(col = p$group_col)
+  if (!is.null(gp)) {
+    src <- gp$source %||% "column"
+    col <- nz(gp$col %||% p$group_col)
+    if (src == "column" && is.null(col)) gp <- NULL else
+      gp <- list(source = src, col = if (src == "column") col else NULL,
+                 sep = nz(gp$sep), recode = if (length(gp$recode)) gp$recode else NULL,
+                 levels = if (src == "column" && length(gp$levels)) as.character(gp$levels) else NULL,
+                 reference = if (src == "simulate") (nz(gp$reference) %||% "native") else nz(gp$reference),
+                 pool_focal = isTRUE(gp$pool_focal),
+                 prop = gp$prop %||% 0.1, bias = gp$bias %||% "random",
+                 sim_space = gp$sim_space %||% utils::tail(names(out$spaces), 1),
+                 hull_axes = as.integer(gp$hull_axes %||% 4), null = gp$null %||% "none",
+                 nrep = as.integer(gp$nrep %||% 99), nperm = as.integer(gp$nperm %||% 999),
+                 density = isTRUE(gp$density), density_axes = as.integer(gp$density_axes %||% 2),
+                 bw = gp$bw %||% 1, abundance_col = nz(gp$abundance_col),
+                 sites = if (length(gp$sites) && !is.null(nz(gp$sites$site_col)))
+                   list(site_col = gp$sites$site_col, species_col = gp$sites$species_col %||% "species",
+                        group_col = nz(gp$sites$group_col)) else NULL)
+  }
+  out$groups <- gp
+  cv <- p$covariate
+  out$covariate <- if (!is.null(nz(cv$col))) list(col = cv$col, transform = cv$transform %||% "none",
+    fit_axes = as.integer(cv$fit_axes %||% 4), nperm = as.integer(cv$nperm %||% 999)) else NULL
+  ex <- p$extinction
+  out$extinction <- if (!is.null(ex)) list(steps = as.integer(ex$steps %||% 10),
+    nrep = as.integer(ex$nrep %||% 99), hull_axes = as.integer(ex$hull_axes %||% 4)) else NULL
   out
 }
 
@@ -287,8 +338,9 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     sprintf("  %-15s = %s%s  # %s", name, .dep(p[[name]]), if (last) "" else ",", comment)
   sp <- paste0("list(\n", paste0("    `", names(p$spaces), "` = ", vapply(p$spaces, .dep, ""),
                                  collapse = ",\n"), "\n  )")
-  nn <- if (is.null(p$nonnative)) "NULL" else paste0("list(\n",
-    paste0("    ", names(p$nonnative), " = ", vapply(p$nonnative, .dep, ""), collapse = ",\n"), "\n  )")
+  lst <- function(x) if (is.null(x)) "NULL" else paste0("list(\n",
+    paste0("    ", names(x), " = ", vapply(x, .dep, ""), collapse = ",\n"), "\n  )")
+  nn <- lst(p$groups)
   c("# ============================================================================",
     sprintf("# Parameters of \"%s\"", title),
     sprintf("# Written by DisentFunSpaces %s on %s. Every setting of the analysis is here:",
@@ -302,7 +354,6 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     line("phylo_file", "phylogeny used to impute missing values (or NULL)"),
     line("species_col", "species column"),
     line("iucn_col", "IUCN category column, for FUSE (or NULL)"),
-    line("status_col", "native / non-native status column (or NULL)"),
     line("seed", "random seed (imputation, permutations, simulations)"),
     "  # --- missing values ---",
     line("missing", "\"keep\" (pairwise Gower), \"drop\" or \"impute\" (missForest)"),
@@ -327,8 +378,14 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     "  # --- species metrics ---",
     line("k", "nearest neighbours (FUn)"),
     line("top", "proportion of species of the top sets (congruence)"),
-    "  # --- non-native species ---",
-    paste0("  nonnative       = ", nn, "  # NULL: not analysed"),
+    "  # --- species groups (any categorical attribute that is not a trait) ---",
+    "  # col: grouping column; sep: separator of multiple labels; recode: merged labels;",
+    "  # levels: groups analysed; reference: reference group(s) of the species-level analysis",
+    paste0("  groups          = ", nn, ",  # NULL: not analysed"),
+    "  # continuous variable that is not a trait (col, transform, fit_axes, nperm)",
+    paste0("  covariate       = ", lst(p$covariate), ",  # NULL: not analysed"),
+    "  # extinction scenarios (metrics step, IUCN column): steps, nrep, hull_axes",
+    paste0("  extinction      = ", lst(p$extinction), "  # NULL: not analysed"),
     ")")
 }
 
@@ -351,11 +408,24 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
                                 if (p$mantel) ", + Mantel tests" else "")),
     if ("metrics" %in% steps) b("Species metrics", sprintf("k = %d nearest neighbours, top %g%%%s", p$k,
                                 100 * p$top, if (!is.null(p$iucn_col)) ", FUSE from IUCN categories" else "")),
-    if (!is.null(p$nonnative)) b("Non-native species", if (p$nonnative$source == "simulate")
-      sprintf("simulated introductions (%g%%, %s bias, %s space)", 100 * p$nonnative$prop,
-              p$nonnative$bias, p$nonnative$sim_space) else
-      sprintf("status column '%s' ('%s' = native), null model: %s", p$status_col,
-              p$nonnative$native, p$nonnative$null)),
+    if (!is.null(p$groups)) b("Species groups", if (p$groups$source == "simulate")
+      sprintf("simulated native / non-native status (%g%%, %s bias, %s space), reference: native",
+              100 * p$groups$prop, p$groups$bias, p$groups$sim_space) else
+      sprintf("column '%s'%s%s, reference: %s, null model: %s", p$groups$col,
+              if (length(p$groups$levels)) sprintf(" (%s)", paste(p$groups$levels, collapse = ", ")) else "",
+              if (!is.null(p$groups$sep)) sprintf(", labels separated by '%s'", p$groups$sep) else "",
+              if (is.null(p$groups$reference)) "none" else paste(p$groups$reference, collapse = " + "),
+              p$groups$null)),
+    if (!is.null(p$groups) && isTRUE(p$groups$density)) b("Densities", sprintf(
+      "kernel densities on %d axes (bandwidth x %g%s)", p$groups$density_axes, p$groups$bw,
+      if (!is.null(p$groups$abundance_col)) sprintf(", weighted by '%s'", p$groups$abundance_col) else "")),
+    if (!is.null(p$groups$sites)) b("Assemblages", sprintf("data/raw/assemblages.csv (columns '%s', '%s'%s)",
+      p$groups$sites$site_col, p$groups$sites$species_col,
+      if (!is.null(p$groups$sites$group_col)) sprintf(", groups per assemblage in '%s'", p$groups$sites$group_col) else "")),
+    if (!is.null(p$covariate)) b("Continuous variable", sprintf("'%s' (transform: %s; fit on %d axes, %d permutations)",
+      p$covariate$col, p$covariate$transform, p$covariate$fit_axes, p$covariate$nperm)),
+    if (!is.null(p$extinction)) b("Extinction scenarios", sprintf("%d steps, %d replicates, hulls on %d axes",
+      p$extinction$steps, p$extinction$nrep, p$extinction$hull_axes)),
     b("Random seed", p$seed)), collapse = "\n")
 }
 
@@ -391,19 +461,53 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     v("results/tables/Table4_metric_congruence.csv", c("metric", "spearman", "jaccard_top", "n_shared_top"),
       c("species metric compared", "Spearman correlation between the rankings in two spaces",
         "Jaccard overlap of the top sets", "species in both top sets")),
-    v("results/tables/TableS6_nonnative_species.csv", c("FNov", "FSp_native", "inside_native_hull",
-                                                        "nearest_native"),
-      c("functional novelty: distance to the nearest native species (rescaled)",
-        "distance to the native centroid (rescaled)", "inside the convex hull of native species",
-        "nearest native species")),
-    v("results/tables/TableS7_native_species.csv", c("dFUn_rel", "n_nonnative_knn"),
-      c("relative change in FUn once non-native species are added",
-        "non-native species among the k nearest neighbours")),
-    v("results/tables/Table6_assemblage_change.csv", c("FRic_*", "FDis_*", "FOri_*", "MPD_*",
-                                                       "d_*", "ses_*, p_*"),
-      c("functional richness (convex hull volume) before (hist) and after (cur) introductions",
+    v("results/tables/Table5_groups_summary.csv", c("permanova_R2, permanova_p", "permdisp_p",
+                                                    "overlap_median, overlap_min", "segregation_median"),
+      c("share of variance explained by the groups and permutation p-value (PERMANOVA)",
+        "test of homogeneity of dispersions (PERMDISP)",
+        "median and minimum hull overlap (intersection / union) of the pairs of groups",
+        "median ratio of observed / expected same-group neighbours")),
+    v("results/tables/TableS6_groups.csv", c("n", "FRic", "FDis", "FOri", "MPD", "p_outside_others",
+                                             "prop_V_exclusive", "knn_same", "segregation"),
+      c("species of the group", "hull volume relative to all species", "mean distance to the group centroid",
+        "mean nearest-neighbour distance", "mean pairwise distance",
+        "proportion of species outside the hull of the other species",
+        "share of the group hull not shared with the other species",
+        "mean proportion of the k nearest neighbours in the same group",
+        "knn_same / its expectation under random labels")),
+    v("results/tables/Table6_group_pairs.csv", c("V1, V2, V_inter", "overlap", "beta_jac, beta_jtu, beta_jne",
+                                                 "p1_in_hull2, p2_in_hull1", "centroid_dist", "ses_*, p_*"),
+      c("hull volumes of the two groups and of their intersection (relative to all species)",
+        "intersection / union", "functional Jaccard dissimilarity, turnover and nestedness components",
+        "proportion of the species of one group inside the hull of the other",
+        "distance between group centroids", "standardised effect size and p-value (label permutations)")),
+    v("results/tables/TableS7_focal_species.csv", c("FNov", "FSp_ref", "inside_ref_hull", "nearest_ref"),
+      c("novelty: distance to the nearest reference species (rescaled)",
+        "distance to the reference centroid (rescaled)", "inside the convex hull of reference species",
+        "nearest reference species")),
+    v("results/tables/TableS8_reference_species.csv", c("dFUn_rel", "n_focal_knn"),
+      c("relative change in FUn of reference species once focal species are added",
+        "focal species among the k nearest neighbours")),
+    v("results/tables/TableS9_group_contribution.csv", c("FRic_*", "FDis_*", "FOri_*", "MPD_*",
+                                                         "d_*", "ses_*, p_*"),
+      c("functional richness of the reference group alone (ref) and with the focal group (all)",
         "functional dispersion", "functional originality", "mean pairwise distance",
-        "change after introductions", "standardised effect size and p-value against the null model")))
+        "contribution of the focal group (all - ref)", "standardised effect size and p-value against the null model")),
+    v("results/tables/TableS13_group_assemblages.csv", c("assemblage, group", "*_ref, *_all, d_*",
+                                                         "overlap", "p_focal_outside"),
+      c("assemblage and focal group", "metrics of the reference species alone, with the focal species, and contribution",
+        "hull overlap of focal and reference species in the assemblage",
+        "proportion of focal species outside the reference hull")),
+    v("results/tables/Table8_extinction_scenarios.csv", c("loss_risk", "loss_random", "ses, p"),
+      c("relative loss after removing the threatened species by decreasing extinction probability",
+        "same number of species removed at random", "standardised effect size and one-sided p-value")),
+    v("results/tables/TableS11_stochastic_extinctions.csv", c("n_lost_mean", "loss", "loss_random"),
+      c("mean number of species lost (EDGE2 probabilities)", "relative loss", "loss for as many random species")),
+    v("results/tables/Table9_continuous_variable.csv", c("R2, R2_adj, p_fit", "knn_cor, p_knn",
+                                                         "rho_FUn, rho_FSp"),
+      c("linear fit of the variable on the first axes, permutation p-value",
+        "correlation with the mean of the k nearest neighbours (functional autocorrelation)",
+        "Spearman correlations with functional uniqueness and specialisation")))
 }
 
 # An ASCII tree of a folder (for the Shiny app).
