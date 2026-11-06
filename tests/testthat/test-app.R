@@ -181,3 +181,63 @@ test_that("separator and decimal mark of text files are detected", {
   writeLines(c("Species\tREs", "A a\t0.1"), f)
   expect_equal(attr(DisentFunSpaces:::.read_table_fast(f, "auto"), "sep"), "\t")
 })
+
+test_that("app analyses indicator (0 / 1) columns as non-exclusive groups", {
+  d <- birds_traits[seq(1, 2000, by = 5), setdiff(names(birds_traits), c("family", "iucn"))]
+  d$Hunting <- as.numeric(d$order %in% c("Anseriformes", "Galliformes"))
+  d$Pet <- as.numeric(d$order %in% c("Psittaciformes", "Galliformes"))
+  d$`All uses` <- pmax(d$Hunting, d$Pet)
+  d$order <- NULL
+  f <- tempfile(fileext = ".csv"); utils::write.csv(d, f, row.names = FALSE)
+  shiny::testServer(DisentFunSpaces:::app_server, {
+    session$setInputs(src = "upload", sep = ",", file = list(datapath = f, name = "uses.csv"))
+    session$setInputs(species_col = "species", iucn_col = "", group_cols = c("Hunting", "Pet", "All uses"))
+    expect_false(any(c("Hunting", "Pet", "All uses") %in% rv$ti$trait))
+    session$setInputs(validate = 1); session$setInputs(missing = "drop", run_missing = 1)
+    session$setInputs(spaces_sel = names(default_spaces(rv$traits)), weighting = "variable",
+                      correction = "none", max_axes = 5, run_spaces = 1)
+    expect_gte(length(rv$spaces), 1)
+    session$setInputs(axes_mode = "all", k_nn = 5, seed = 1, grp_pool = FALSE, grp_density = FALSE,
+                      grp_src = "binary", grp_none = "none", grp_recode = "")
+    expect_equal(grp_bin_avail(), c("Hunting", "Pet", "All uses"))
+    expect_equal(names(DisentFunSpaces:::.union_columns(raw(), grp_bin_avail())), "All uses")
+    session$setInputs(grp_bin_cols = c("Hunting", "Pet"))
+    expect_false(grp_counts()$exclusive)
+    expect_setequal(names(grp_counts()$n), c("none", "Hunting", "Pet"))
+    session$setInputs(grp_levels = c("none", "Hunting", "Pet"), grp_ref = "none", grp_hull_axes = 3,
+                      grp_null = "none", grp_nrep = 9, run_groups = 1)
+    expect_s3_class(rv$groups, "fs_groups_all")
+    expect_setequal(unique(rv$groups$focal$group), c("Hunting", "Pet"))
+    expect_equal(prj_params()$groups$col, c("Hunting", "Pet"))
+    expect_equal(prj_params()$groups$none, "none")
+    expect_true(grepl("groups_from_columns(traits_raw, c(\"Hunting\", \"Pet\")",
+                      analysis_script(script_params()), fixed = TRUE))
+  })
+})
+
+test_that("plots of the package convert to interactive plotly figures", {
+  skip_if_not_installed("plotly")
+  tr <- ex()
+  sp <- build_spaces(tr, spaces = list(Diet = "Diet", Locomotion = "Locomotion"))
+  p <- as_plotly(plot_space(sp$Locomotion))
+  expect_s3_class(p, "plotly")
+  # species names on hover, arrow heads kept as annotations
+  txt <- unlist(lapply(p$x$data, `[[`, "text"))
+  expect_true(all(rownames(sp$Locomotion$coords) %in% txt))
+  expect_gt(length(p$x$layout$annotations), 0)
+  g <- simulate_introductions(sp$Locomotion, prop = 0.1, seed = 1)
+  q <- as_plotly(plot_groups(sp$Locomotion, g, reference = "native", label = 3))
+  expect_identical(q$x$layout$yaxis$scaleanchor, "x")
+  expect_false(any(grepl("^\\(", vapply(q$x$data, function(t) if (is.null(t$name)) "" else t$name, ""))))
+  expect_s3_class(as_plotly(plot_eigen(sp)), "plotly")
+  expect_s3_class(as_plotly(plot_procrustes(procrustes_residuals(sp$Diet, sp$Locomotion))), "plotly")
+})
+
+test_that("the Procrustes figure is drawn with a few traces, whatever the number of species", {
+  skip_if_not_installed("plotly")
+  sp <- build_spaces(ex(), spaces = list(Diet = "Diet", Locomotion = "Locomotion"))
+  g <- as_plotly(plot_procrustes(procrustes_residuals(sp$Diet, sp$Locomotion)))
+  expect_lte(length(g$x$data), 8)
+  expect_true(all(rownames(sp$Diet$coords) %in% unlist(lapply(g$x$data, function(t)
+    sub("<br>.*$", "", t$text)))))
+})

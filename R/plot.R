@@ -1,6 +1,6 @@
 utils::globalVariables(c("x", "y", "xend", "yend", "label", "dimension", "r", "lab",
                          "space1", "space2", "n_axes", "mAD", "value", "axis", "group",
-                         "level", "xr", "yr", "residual", "col", "species", "n"))
+                         "level", "xr", "yr", "residual", "col", "species", "n", "hover"))
 
 .dim_palette <- function(dims) {
   base <- c("#2E7D32", "#1565C0", "#C62828", "#6A1B9A", "#EF6C00", "#00838F",
@@ -53,7 +53,8 @@ plot_space <- function(space, axes = c(1, 2), density = TRUE, arrows = TRUE,
   if (is_discrete && is.null(color_by)) {
     cnt <- stats::aggregate(list(n = rep(1L, nrow(df))),
                             by = list(x = round(df$x, 8), y = round(df$y, 8)), FUN = sum)
-    p <- p + ggplot2::geom_point(data = cnt, ggplot2::aes(x = x, y = y, size = n),
+    cnt$hover <- sprintf("%d species", cnt$n)
+    p <- p + .geom_point_hover(data = cnt, ggplot2::aes(x = x, y = y, size = n, text = hover),
                                  shape = 21, fill = "#E8A33D", colour = "#7F0000", alpha = 0.6,
                                  inherit.aes = FALSE) +
       ggplot2::scale_size_area(max_size = 14, name = "Species")
@@ -69,10 +70,12 @@ plot_space <- function(space, axes = c(1, 2), density = TRUE, arrows = TRUE,
   if (is_discrete && is.null(color_by)) {
     # bubbles already drawn
   } else if (is.null(color_by)) {
-    p <- p + ggplot2::geom_point(size = point_size, alpha = point_alpha, colour = "grey25")
+    p <- p + .geom_point_hover(ggplot2::aes(text = species), size = point_size, alpha = point_alpha,
+                               colour = "grey25")
   } else {
     df$col <- color_by[df$species]
-    p <- p + ggplot2::geom_point(data = df, ggplot2::aes(colour = col),
+    df$hover <- paste0(df$species, "<br>", df$col)
+    p <- p + .geom_point_hover(data = df, ggplot2::aes(colour = col, text = hover),
                                  size = point_size, alpha = point_alpha) +
       ggplot2::labs(colour = NULL)
   }
@@ -144,7 +147,7 @@ plot_comparison <- function(x) {
   )
   df$space1 <- factor(df$space1, levels = nm)
   df$space2 <- factor(df$space2, levels = rev(nm))
-  ggplot2::ggplot(df, ggplot2::aes(x = space1, y = space2, fill = r)) +
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = space1, y = space2, fill = r)) +
     ggplot2::geom_tile(colour = "white") +
     ggplot2::geom_text(ggplot2::aes(label = lab), size = 4) +
     ggplot2::scale_fill_gradient(low = "#F7FBFF", high = "#08519C", limits = c(0, 1),
@@ -157,6 +160,9 @@ plot_comparison <- function(x) {
     ggplot2::theme_minimal(base_size = 11) +
     ggplot2::theme(panel.grid = ggplot2::element_blank(),
                    axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
+  # kept for as_plotly(), which redraws this heatmap directly (ggplotly() of geom_tile is fragile)
+  attr(p, "fs_comparison") <- x
+  p
 }
 
 #' Procrustes superimposition of two spaces
@@ -176,10 +182,11 @@ plot_procrustes <- function(residuals, n_label = 8) {
                    xend = Y[, 1], yend = Y[, 2], stringsAsFactors = FALSE)
   df$residual <- residuals$residual[match(df$species, residuals$species)]
   top <- df[df$species %in% utils::head(residuals$species, n_label), ]
-  ggplot2::ggplot(df) +
+  p <- ggplot2::ggplot(df) +
     ggplot2::geom_segment(ggplot2::aes(x = x, y = y, xend = xend, yend = yend, colour = residual),
                           arrow = ggplot2::arrow(length = ggplot2::unit(0.08, "cm")), linewidth = 0.3) +
-    ggplot2::geom_point(ggplot2::aes(x = x, y = y), size = 0.6) +
+    .geom_point_hover(ggplot2::aes(x = x, y = y, text = sprintf("%s<br>residual = %.3g", species, residual)),
+                      size = 0.6) +
     ggplot2::geom_text(data = top, ggplot2::aes(x = xend, y = yend, label = species),
                        size = 2.6, fontface = "italic", vjust = -0.6, check_overlap = TRUE) +
     ggplot2::scale_colour_viridis_c(option = "magma", end = 0.9, direction = -1, name = "Residual") +
@@ -187,6 +194,10 @@ plot_procrustes <- function(residuals, n_label = 8) {
                   title = sprintf("Procrustes: %s -> %s", sp[1], sp[2]),
                   subtitle = sprintf("Procrustes r = %.3f", sqrt(1 - fit$ss))) +
     ggplot2::theme_classic(base_size = 11)
+  # kept for as_plotly(), which redraws this figure directly (fast for many species)
+  attr(p, "fs_residuals") <- residuals
+  attr(p, "fs_n_label") <- n_label
+  p
 }
 
 #' Plot space quality against the number of axes

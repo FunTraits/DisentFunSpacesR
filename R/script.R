@@ -8,7 +8,8 @@
 #'   `species_col`, `iucn_col`, `sep` (optionally `dec`), `missing`, `phylo_file`,
 #'   `n_phylo_axes`, `ntree`, `cov_cols`, `spaces`, `weighting`, `correction`,
 #'   `method`, `nrepet`, `n_axes`, `mantel`, `k`; optionally `engine`,
-#'   `eigen`, `keep_dist`, `cores` (large datasets), `group_col`
+#'   `eigen`, `keep_dist`, `cores` (large datasets), `group_col` (several
+#'   indicator columns, with `group_none`: see [groups_from_columns()])
 #'   (and `group_reference`, `group_sep`, `group_recode`, `group_levels`;
 #'   `status_col` / `native_label` of version 0.7.0 still accepted),
 #'   `hull_axes` for species groups).
@@ -52,7 +53,10 @@ analysis_script <- function(p) {
   nn_code <- if (!is.null(gcol)) paste0('
 
 ## 6. Species groups (any categorical attribute that is not a trait)
-groups <- setNames(traits_raw[["', gcol, '"]], traits_raw[["', p$species_col, '"]])
+', if (length(gcol) > 1 || !is.null(p$group_none)) paste0(
+'groups <- groups_from_columns(traits_raw, ', .dep(gcol), ', "', p$species_col, '", none = ',
+.dep(if (is.null(p$group_none)) "" else p$group_none), ')') else paste0(
+'groups <- setNames(traits_raw[["', gcol, '"]], traits_raw[["', p$species_col, '"]])'), '
 grp <- groups_all(spaces, groups, reference = ', .dep(gref), ', sep = ', .dep(p$group_sep),
 ', recode = ', .dep(p$group_recode), ',
                   levels = ', .dep(p$group_levels), ', n_axes = ', nax, ', k = ', p$k, ',

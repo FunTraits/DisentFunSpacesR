@@ -166,3 +166,31 @@ test_that("extinction scenarios follow their definitions", {
                              metrics = "FRic", stochastic = FALSE)
   expect_null(e2$stochastic); expect_equal(max(e2$curve$n_removed), 10)
 })
+
+test_that("groups_from_columns turns indicator columns into non-exclusive groups", {
+  d <- data.frame(species = c("a", "b", "c", "d", "e"), Fisheries = c(1, 0, 1, 0, NA),
+                  Aquarium = c("no", "no", "yes", "no", NA), check.names = FALSE)
+  d$`All uses` <- c(1, 1, 1, 0, NA)
+  g <- groups_from_columns(d, c("Fisheries", "Aquarium"), "species")
+  expect_equal(as.vector(unname(g)), c("Fisheries", "none", "Fisheries;Aquarium", "none", NA))
+  expect_equal(attr(g, "sep"), ";")
+  gr <- DisentFunSpaces:::.as_groups(g, d$species)   # sep taken from the attribute
+  expect_false(gr$exclusive)
+  expect_equal(colSums(gr$M)[c("none", "Fisheries", "Aquarium")], c(none = 2, Fisheries = 2, Aquarium = 1))
+  expect_true(is.na(groups_from_columns(d, "Fisheries", "species", none = "")[["b"]]))
+  expect_error(groups_from_columns(d, "species", "species"), "not a 0 / 1")
+  expect_error(groups_from_columns(d, "Fisheries", "species", none = "Fisheries"), "also the name")
+  expect_true(DisentFunSpaces:::.is_indicator(d$Aquarium))
+  expect_false(DisentFunSpaces:::.is_indicator(c(0.2, 1.5)))
+  d$Aquarium <- c(0, 1, 1, 0, NA)
+  expect_equal(names(DisentFunSpaces:::.union_columns(d, c("Fisheries", "Aquarium", "All uses"))), "All uses")
+  # analysis with a reference group of unused species
+  s <- grp_setup()
+  sp <- names(s$ord)
+  dd <- data.frame(species = sp, u1 = as.numeric(s$ord == "Anseriformes"),
+                   u2 = as.numeric(s$ord %in% c("Anseriformes", "Accipitriformes")))
+  gg <- groups_from_columns(dd, c("u1", "u2"), "species")
+  r <- groups_all(s$sp["Diet"], gg, reference = "none", hull_axes = 3, nperm = 0)
+  expect_setequal(unique(r$focal$group), c("u1", "u2"))
+  expect_true(is.na(r$test$permanova_R2))
+})

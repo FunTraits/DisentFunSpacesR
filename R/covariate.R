@@ -128,7 +128,8 @@ plot_covariate <- function(space, x, axes = c(1, 2), transform = c("none", "log1
   transform <- match.arg(transform)
   X <- space$coords
   v <- .covariate_values(x, rownames(X), transform)
-  d <- data.frame(a1 = X[, axes[1]], a2 = X[, axes[2]], x_value = v)
+  d <- data.frame(a1 = X[, axes[1]], a2 = X[, axes[2]], x_value = v, species = rownames(X))
+  d$hover <- sprintf("%s<br>%s = %s", d$species, name, signif(d$x_value, 3))
   d <- d[order(is.finite(d$x_value), d$x_value), ]
   ok <- is.finite(d$x_value)
   b <- stats::coef(stats::lm(x_value ~ a1 + a2, data = d[ok, ]))[2:3]
@@ -136,8 +137,9 @@ plot_covariate <- function(space, x, axes = c(1, 2), transform = c("none", "log1
   b <- if (all(is.finite(b)) && sum(b^2) > 0) b / sqrt(sum(b^2)) * r else c(0, 0)
   c0 <- c(mean(d$a1[ok]), mean(d$a2[ok]))
   ggplot2::ggplot(d, ggplot2::aes(a1, a2)) +
-    ggplot2::geom_point(data = d[!ok, ], colour = "grey80", size = 0.9) +
-    ggplot2::geom_point(data = d[ok, ], ggplot2::aes(colour = x_value), size = 1.4, alpha = 0.85) +
+    .geom_point_hover(data = d[!ok, ], ggplot2::aes(text = hover), colour = "grey80", size = 0.9) +
+    .geom_point_hover(data = d[ok, ], ggplot2::aes(colour = x_value, text = hover), size = 1.4,
+                      alpha = 0.85) +
     ggplot2::annotate("segment", x = c0[1], y = c0[2], xend = c0[1] + b[1], yend = c0[2] + b[2],
                       arrow = ggplot2::arrow(length = ggplot2::unit(0.25, "cm")), linewidth = 0.8) +
     ggplot2::scale_colour_viridis_c(name = if (transform == "none") name else sprintf("%s (%s)", name, transform)) +

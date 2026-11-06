@@ -1,5 +1,23 @@
 # DisentFunSpaces 0.8.0
 
+## Interactive figures in the application
+
+* All the figures of the Shiny application are interactive 'plotly' widgets
+  (when 'plotly', now suggested, is installed; static plots otherwise): hover
+  shows the species name and its group, IUCN category, residual or value;
+  zoom and pan; a click on a legend entry hides that group; the camera button
+  exports an SVG. The PDF downloads are unchanged.
+* New `as_plotly()` converts any `plot_*()` figure of the package (keeps the
+  arrow heads of trait correlations, the subtitle and the equal scaling of
+  the axes).
+* The matrix of Procrustes correlations (tab 5, `plot_comparison()`) is drawn
+  directly with plotly instead of `ggplotly()`, whose conversion of
+  `geom_tile()` failed in the application ('x is null'); hover gives r, p and
+  the number of shared species.
+* No more warnings when the application starts: `page_navbar()` uses
+  `navbar_options()` (bslib >= 0.9.0 now required) and the layout of the
+  'Assemblages' tab declares one column width per element.
+
 ## Species groups (generalises the non-native analysis)
 
 * New functions for groups of species defined by any categorical attribute
@@ -23,6 +41,16 @@
   (`FNov`, `FSp_ref`, `inside_ref_hull`, `dFUn_rel`, contribution of the
   focal group), with optional weights (`FUSW`). `nonnative_*()` are
   unchanged and give the same values with `reference = "native"`.
+
+* `groups_from_columns()`: groups from indicator (0 / 1) columns, one group
+  per column (e.g. one column per human use: fisheries, aquaculture,
+  aquarium, game fish), species in several groups, and a group (`none`) for
+  species set to 0 in all columns, the natural reference. App (tab 7): new
+  source "Indicator columns (0 / 1, one group per column)", with detection
+  of a column that is the union of the others ("All uses"); the exported
+  script, analysis project and Methods text follow. Tab 1 proposes common
+  use columns as non-trait variables, and warns that undeclared 0 / 1
+  columns are used as binary traits.
 
 ## Densities, extinction scenarios, continuous variables, assemblages
 

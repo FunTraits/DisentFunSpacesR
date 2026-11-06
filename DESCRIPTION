@@ -37,9 +37,9 @@ Copyright: See inst/COPYRIGHTS for the fonts (IBM Plex, SIL Open Font
 Encoding: UTF-8
 Language: en-GB
 Depends: R (>= 4.1)
-Imports: ade4, ape, vegan, FNN, geometry, MASS, grDevices, ggplot2, shiny, bslib,
+Imports: ade4, ape, vegan, FNN, geometry, MASS, grDevices, ggplot2, shiny, bslib (>= 0.9.0),
         DT, htmltools, parallel, stats, utils
-Suggests: missForest, knitr, patchwork, rmarkdown, readxl, RSpectra, callr, zip,
+Suggests: missForest, knitr, patchwork, plotly, rmarkdown, readxl, RSpectra, callr, zip,
         data.table, testthat (>= 3.0.0)
 Config/testthat/edition: 3
 LazyData: true

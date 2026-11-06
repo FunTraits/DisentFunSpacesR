@@ -48,7 +48,10 @@ if (!is.null(gp)) {
     utils::write.csv(data.frame(species = names(groups), group = unname(groups)),
                      file.path("data", "processed", "species_groups_simulated.csv"), row.names = FALSE)
   } else {
-    groups <- species_vector(traits_raw, gp$col)
+    groups <- if (length(gp$col) > 1 || !is.null(gp$none)) {
+      # one indicator (0 / 1) column per group (e.g. one column per human use)
+      groups_from_columns(traits_raw, gp$col, PARAMS$species_col, none = gp$none)
+    } else species_vector(traits_raw, gp$col)
     groups <- stats::setNames(groups[sp], sp)
   }
   # abundance weights of the densities, and assemblages (long table)

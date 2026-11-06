@@ -23,6 +23,7 @@ utils::globalVariables(c("group", "pair", "label", "a1", "a2", "position", "n_re
 ## subset of the groups. Returns a logical membership matrix (species x
 ## groups) and whether groups are mutually exclusive.
 .as_groups <- function(groups, species, sep = NULL, recode = NULL, levels = NULL) {
+  if (is.null(sep) && !is.null(attr(groups, "sep"))) sep <- attr(groups, "sep")  # groups_from_columns()
   if (is.data.frame(groups) && all(c("species", "group") %in% names(groups)))
     groups <- stats::setNames(as.character(groups$group), groups$species)
   if (is.matrix(groups) || is.data.frame(groups)) {
@@ -65,6 +66,98 @@ utils::globalVariables(c("group", "pair", "label", "a1", "a2", "position", "n_re
   for (j in seq_along(lv)) M[, j] <- vapply(labs, function(z) lv[j] %in% z, logical(1))
   if (ncol(M) < 1) stop("No group found.", call. = FALSE)
   list(M = M, exclusive = all(rowSums(M) <= 1), levels = lv)
+}
+
+#' Species groups from indicator (0 / 1) columns
+#'
+#' Many non-trait attributes come as one presence / absence column per
+#' category: one column per human use (fisheries, aquaculture, aquarium,
+#' game fish...), per habitat, per country... `groups_from_columns()` turns
+#' such columns into the group labels used by [groups_all()],
+#' [group_overlap()], [group_species()] and [plot_groups()]: one label per
+#' column set to 1 (several labels per species, separated by `sep`), and
+#' `none` for the species set to 0 in all columns (e.g. species without any
+#' use: the natural reference group).
+#'
+#' Values read as 1: `1`, `TRUE`, `"yes"`, `"y"`, `"x"`; as 0: `0`, `FALSE`,
+#' `"no"`, `"n"`, empty; any other value is an error. A species with missing
+#' values only gets no group (`NA`); a missing value next to a 1 is ignored.
+#'
+#' @param data Data frame with the species column and the indicator columns.
+#' @param columns Names of the indicator columns (one group per column; the
+#'   group takes the name of the column).
+#' @param species_col Name of the species column.
+#' @param none Label of the species set to 0 in all columns; `NULL` or `""`
+#'   to leave them without a group.
+#' @param sep Separator of the labels of species in several groups (give the
+#'   same `sep` to [groups_all()] and the other functions).
+#' @return A character vector named by species, with attribute `sep`.
+#' @examples
+#' d <- data.frame(species = c("a", "b", "c", "d"), Fisheries = c(1, 0, 1, 0),
+#'                 Aquarium = c(0, 1, 1, 0))
+#' groups_from_columns(d, c("Fisheries", "Aquarium"), "species")
+#' @export
+groups_from_columns <- function(data, columns, species_col = "species", none = "none", sep = ";") {
+  data <- as.data.frame(data, stringsAsFactors = FALSE)
+  if (!length(columns)) stop("Give at least one indicator column.", call. = FALSE)
+  miss <- setdiff(c(species_col, columns), names(data))
+  if (length(miss)) stop("Column(s) not found: ", paste(miss, collapse = ", "), call. = FALSE)
+  if (any(grepl(sep, columns, fixed = TRUE)))
+    stop("Column names must not contain the separator '", sep, "'.", call. = FALSE)
+  M <- vapply(columns, function(cl) .as_indicator(data[[cl]], cl), numeric(nrow(data)))
+  M <- matrix(M, nrow(data), dimnames = list(NULL, columns))
+  lab <- apply(M, 1, function(z) {
+    if (all(is.na(z))) return(NA_character_)
+    z <- columns[!is.na(z) & z > 0]
+    if (length(z)) paste(z, collapse = sep) else NA_character_
+  })
+  allzero <- is.na(lab) & rowSums(!is.na(M)) > 0
+  if (!is.null(none) && nzchar(none)) {
+    if (none %in% columns) stop("`none` ('", none, "') is also the name of a column.", call. = FALSE)
+    lab[allzero] <- none
+  }
+  out <- stats::setNames(lab, as.character(data[[species_col]]))
+  attr(out, "sep") <- sep
+  out
+}
+
+## Internal: read a presence / absence column as 0 / 1 (NA kept); error if not binary
+.as_indicator <- function(v, name = "") {
+  if (is.logical(v)) return(as.numeric(v))
+  if (is.numeric(v)) {
+    if (!all(v[!is.na(v)] %in% c(0, 1))) stop("Column '", name, "' is not a 0 / 1 indicator.", call. = FALSE)
+    return(as.numeric(v))
+  }
+  x <- tolower(trimws(as.character(v)))
+  out <- rep(NA_real_, length(x))
+  out[x %in% c("1", "true", "yes", "y", "x", "oui")] <- 1
+  out[x %in% c("0", "false", "no", "n", "", "non")] <- 0
+  if (any(is.na(out) & !is.na(x) & x != "na"))
+    stop("Column '", name, "' is not a 0 / 1 indicator.", call. = FALSE)
+  out
+}
+
+## Internal: is a column a 0 / 1 indicator (at least one 1)?
+.is_indicator <- function(v) {
+  x <- tryCatch(.as_indicator(v), error = function(e) NULL)
+  !is.null(x) && any(x == 1, na.rm = TRUE) && length(unique(x[!is.na(x)])) <= 2
+}
+
+## Internal: indicator columns that are (almost) the union of the others
+## ("All uses"): redundant with the other groups, left out of the default
+## selection. Returns the number of species disagreeing with the union, named
+## by column (`tol`: maximum proportion of disagreeing species).
+.union_columns <- function(data, columns, tol = 0.02) {
+  if (length(columns) < 3) return(stats::setNames(integer(0), character(0)))
+  M <- vapply(columns, function(cl) .as_indicator(data[[cl]], cl), numeric(nrow(data)))
+  M <- matrix(M, nrow(data), dimnames = list(NULL, columns))
+  M[is.na(M)] <- 0
+  n_bad <- vapply(seq_along(columns), function(j)
+    sum(M[, j] != as.numeric(rowSums(M[, -j, drop = FALSE]) > 0)), numeric(1))
+  n_one <- colSums(M)
+  # the union holds the most species
+  keep <- n_bad <= tol * nrow(M) & n_one > 0 & n_one == max(n_one)
+  stats::setNames(as.integer(n_bad[keep]), columns[keep])
 }
 
 ## Internal: vertices of the convex hull of X (fewer points for intersections)
@@ -755,7 +848,8 @@ plot_groups <- function(space, groups, axes = c(1, 2), sep = NULL, recode = NULL
       if (!is.null(h)) p <- p + ggplot2::geom_polygon(data = h, ggplot2::aes(a1, a2, colour = group,
                                                          fill = group), alpha = 0.12, linewidth = 0.5)
     }
-    p <- p + ggplot2::geom_point(data = long, ggplot2::aes(a1, a2, colour = group), size = 1.1,
+    long$hover <- paste0(long$species, "<br>", long$group)
+    p <- p + .geom_point_hover(data = long, ggplot2::aes(a1, a2, colour = group, text = hover), size = 1.1,
                                  alpha = 0.7) +
       ggplot2::scale_colour_manual(values = pal, name = NULL) +
       ggplot2::scale_fill_manual(values = pal, name = NULL, guide = "none")
@@ -766,18 +860,22 @@ plot_groups <- function(space, groups, axes = c(1, 2), sep = NULL, recode = NULL
                                      sep = sep, recode = recode, levels = levels,
                                      hull_axes = hull_axes)
   refsp <- rownames(gr$M)[rowSums(gr$M[, rf$reference, drop = FALSE]) > 0]
-  rd <- data.frame(a1 = X[refsp, axes[1]], a2 = X[refsp, axes[2]])
+  rd <- data.frame(a1 = X[refsp, axes[1]], a2 = X[refsp, axes[2]],
+                   hover = paste0(refsp, "<br>reference (", rf$ref_label, ")"))
   hr <- rd[grDevices::chull(rd$a1, rd$a2), ]
   f <- x$focal
   f$a1 <- X[f$species, axes[1]]; f$a2 <- X[f$species, axes[2]]
   f$position <- ifelse(is.na(f$inside_ref_hull), "unknown",
                        ifelse(f$inside_ref_hull, "inside reference space", "outside reference space"))
   lv <- unique(f$group); pal <- .group_palette(lv)
+  f$hover <- paste0(f$species, "<br>", f$group, ", ", f$position,
+                    if (!is.null(f$FNov_raw)) sprintf("<br>FNov = %.3g", f$FNov_raw) else "")
   f$group <- factor(f$group, levels = lv)
   p <- ggplot2::ggplot() +
     ggplot2::geom_polygon(data = hr, ggplot2::aes(a1, a2), fill = "grey88", colour = "grey60", alpha = 0.6) +
-    ggplot2::geom_point(data = rd, ggplot2::aes(a1, a2), colour = "grey55", size = 0.9, alpha = 0.5) +
-    ggplot2::geom_point(data = f, ggplot2::aes(a1, a2, colour = group, shape = position),
+    .geom_point_hover(data = rd, ggplot2::aes(a1, a2, text = hover), colour = "grey55", size = 0.9,
+                      alpha = 0.5) +
+    .geom_point_hover(data = f, ggplot2::aes(a1, a2, colour = group, shape = position, text = hover),
                         size = 1.9, alpha = 0.85, stroke = 0.8) +
     ggplot2::scale_colour_manual(values = pal, name = NULL) +
     ggplot2::scale_shape_manual(values = c("inside reference space" = 1,

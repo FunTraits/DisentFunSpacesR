@@ -110,13 +110,18 @@ txt_nn <- if (!is.null(t5)) paste0(sprintf(paste("**Species groups.** %s In each
   if (identical(gp$source, "simulate")) sprintf(paste("A native / non-native status was simulated for",
     "exploration: %g%% of the species were given a non-native status, with a %s bias in the %s space."),
     100 * gp$prop, gp$bias, gp$sim_space) else
-    sprintf("Groups were read from the column '%s'%s%s.", gp$col,
-            if (!is.null(gp$sep)) sprintf(" (several labels per species, separated by '%s')", gp$sep) else "",
+    sprintf("Groups were read from %s%s%s.", if (length(gp$col) > 1 || !is.null(gp$none))
+              sprintf("the indicator (0 / 1) columns %s (one group per column, several groups per species%s)",
+                      paste0("'", gp$col, "'", collapse = ", "),
+                      if (!is.null(gp$none) && nzchar(gp$none)) sprintf("; species set to 0 in all columns formed the group '%s'", gp$none) else "")
+              else sprintf("the column '%s'", gp$col),
+            if (!is.null(gp$sep) && length(gp$col) == 1 && is.null(gp$none)) sprintf(" (several labels per species, separated by '%s')", gp$sep) else "",
             if (length(gp$recode)) paste0("; labels were merged as ", paste(sprintf("%s = %s", names(gp$recode),
               vapply(gp$recode, paste, "", collapse = ", ")), collapse = "; ")) else ""),
   gp$hull_axes,
   if (!identical(gp$null, "none")) sprintf(paste(" Overlap and distance between centroids were compared",
     "to %d permutations of the group labels (standardised effect sizes)."), gp$nrep) else "",
+  if (length(gp$col) > 1 || !is.null(gp$sep)) " Groups were not mutually exclusive: PERMANOVA and PERMDISP were not computed." else
   " Differences in position and dispersion were tested with PERMANOVA and PERMDISP on the coordinates."),
   if (!is.null(gp$reference)) sprintf(paste(" Species of each focal group were then positioned",
     "relative to the reference group (%s): novelty (FNov) as the distance to the nearest",

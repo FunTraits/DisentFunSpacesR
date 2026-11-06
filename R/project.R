@@ -106,8 +106,9 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
   if ("groups" %in% steps && is.null(p$groups) && is.null(p$covariate))
     stop("The species-groups step needs `params$groups$col` (a grouping column; for non-native ",
          "species, the status column) or `params$groups$source = \"simulate\"`.", call. = FALSE)
-  if ("groups" %in% steps && identical(p$groups$source, "column") && !p$groups$col %in% names(data))
-    stop("Grouping column '", p$groups$col, "' not found in `data`.", call. = FALSE)
+  if ("groups" %in% steps && identical(p$groups$source, "column") && !all(p$groups$col %in% names(data)))
+    stop("Grouping column(s) '", paste(setdiff(p$groups$col, names(data)), collapse = "', '"),
+         "' not found in `data`.", call. = FALSE)
   if (!is.null(p$covariate) && !p$covariate$col %in% names(data))
     stop("Column '", p$covariate$col, "' not found in `data`.", call. = FALSE)
   if (!is.null(p$groups$sites) && is.null(assemblages)) {
@@ -149,7 +150,8 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
             if (identical(p$eigen, "partial")) "RSpectra")
   dims <- unique(ti$dimension)
   extra <- c(if (!is.null(p$iucn_col)) sprintf("`%s` (IUCN category, for FUSE)", p$iucn_col),
-             if (!is.null(p$groups$col)) sprintf("`%s` (species groups, not a trait)", p$groups$col),
+             if (!is.null(p$groups$col)) sprintf("%s (species groups, not a trait)",
+               paste0("`", p$groups$col, "`", collapse = ", ")),
              if (!is.null(p$covariate$col)) sprintf("`%s` (continuous variable, not a trait)", p$covariate$col),
              if (length(p$cov_cols)) sprintf("%s (predictors of missing values, not traits)",
                                              paste0("`", p$cov_cols, "`", collapse = ", ")))
@@ -296,6 +298,7 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     col <- nz(gp$col %||% p$group_col)
     if (src == "column" && is.null(col)) gp <- NULL else
       gp <- list(source = src, col = if (src == "column") col else NULL,
+                 none = if (src == "column" && (length(col) > 1 || !is.null(gp$none))) (gp$none %||% "") else NULL,
                  sep = nz(gp$sep), recode = if (length(gp$recode)) gp$recode else NULL,
                  levels = if (src == "column" && length(gp$levels)) as.character(gp$levels) else NULL,
                  reference = if (src == "simulate") (nz(gp$reference) %||% "native") else nz(gp$reference),
@@ -411,7 +414,9 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     if (!is.null(p$groups)) b("Species groups", if (p$groups$source == "simulate")
       sprintf("simulated native / non-native status (%g%%, %s bias, %s space), reference: native",
               100 * p$groups$prop, p$groups$bias, p$groups$sim_space) else
-      sprintf("column '%s'%s%s, reference: %s, null model: %s", p$groups$col,
+      sprintf("%s '%s'%s%s, reference: %s, null model: %s",
+              if (length(p$groups$col) > 1) "indicator columns" else "column",
+              paste(p$groups$col, collapse = "', '"),
               if (length(p$groups$levels)) sprintf(" (%s)", paste(p$groups$levels, collapse = ", ")) else "",
               if (!is.null(p$groups$sep)) sprintf(", labels separated by '%s'", p$groups$sep) else "",
               if (is.null(p$groups$reference)) "none" else paste(p$groups$reference, collapse = " + "),
