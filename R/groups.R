@@ -817,12 +817,15 @@ summary_groups <- function(x, what = c("groups", "focal")) {
 #'   on the plotted axes) instead of hulls?
 #' @param label Number of focal species with highest `FNov` to label (with
 #'   a reference).
+#' @param centroids Draw the centroid of each group (mean position of its
+#'   species, see [group_centroids()]) as a large diamond outlined in black?
+#'   With `reference`, the centroid of the reference species is drawn too.
 #' @return A ggplot.
 #' @export
 plot_groups <- function(space, groups, axes = c(1, 2), sep = NULL, recode = NULL,
                         levels = NULL, reference = NULL, focal = NULL,
                         pool_focal = FALSE, x = NULL, hull_axes = 4, hulls = TRUE,
-                        label = 0, contours = FALSE) {
+                        label = 0, contours = FALSE, centroids = TRUE) {
   X <- space$coords
   gr <- .as_groups(groups, rownames(X), sep = sep, recode = recode, levels = levels)
   long <- do.call(rbind, lapply(colnames(gr$M), function(g) {
@@ -836,6 +839,14 @@ plot_groups <- function(space, groups, axes = c(1, 2), sep = NULL, recode = NULL
     if (nrow(z) >= 3) z[grDevices::chull(z$a1, z$a2), ] else NULL))
   theme <- list(ggplot2::labs(x = ax[1], y = ax[2]), ggplot2::coord_equal(),
                 ggplot2::theme_classic(base_size = 11))
+  # centroid (mean position) of each group on the plotted axes
+  cent_of <- function(d) {
+    cc <- do.call(rbind, lapply(split(d, d$group), function(z)
+      data.frame(group = z$group[1], a1 = mean(z$a1), a2 = mean(z$a2), n = nrow(z),
+                 stringsAsFactors = FALSE)))
+    cc$hover <- sprintf("Centroid of %s<br>%d species<br>(%.3g, %.3g)", cc$group, cc$n, cc$a1, cc$a2)
+    cc
+  }
   if (is.null(reference)) {
     lv <- unique(long$group); pal <- .group_palette(colnames(gr$M))[lv]
     long$group <- factor(long$group, levels = lv)
@@ -853,6 +864,12 @@ plot_groups <- function(space, groups, axes = c(1, 2), sep = NULL, recode = NULL
                                  alpha = 0.7) +
       ggplot2::scale_colour_manual(values = pal, name = NULL) +
       ggplot2::scale_fill_manual(values = pal, name = NULL, guide = "none")
+    if (centroids) {
+      cc <- cent_of(long); cc$group <- factor(cc$group, levels = lv)
+      p <- p + .geom_point_hover(data = cc, ggplot2::aes(a1, a2, fill = group, text = hover),
+                                 shape = 23, size = 3.6, colour = "black", stroke = 0.9,
+                                 inherit.aes = FALSE, show.legend = FALSE)
+    }
     return(p + theme)
   }
   rf <- .ref_focal(gr, reference, focal, pool_focal)
@@ -880,6 +897,18 @@ plot_groups <- function(space, groups, axes = c(1, 2), sep = NULL, recode = NULL
     ggplot2::scale_colour_manual(values = pal, name = NULL) +
     ggplot2::scale_shape_manual(values = c("inside reference space" = 1,
                                            "outside reference space" = 16, "unknown" = 4), name = NULL)
+  if (centroids) {
+    cf <- cent_of(f[, c("group", "a1", "a2")]); cf$group <- factor(cf$group, levels = lv)
+    cr <- data.frame(a1 = mean(rd$a1), a2 = mean(rd$a2), n = nrow(rd))
+    cr$hover <- sprintf("Centroid of the reference (%s)<br>%d species<br>(%.3g, %.3g)",
+                        rf$ref_label, cr$n, cr$a1, cr$a2)
+    p <- p + .geom_point_hover(data = cr, ggplot2::aes(a1, a2, text = hover), shape = 23, size = 3.6,
+                               fill = "grey45", colour = "black", stroke = 0.9, inherit.aes = FALSE) +
+      .geom_point_hover(data = cf, ggplot2::aes(a1, a2, fill = group, text = hover), shape = 23,
+                        size = 3.6, colour = "black", stroke = 0.9, inherit.aes = FALSE,
+                        show.legend = FALSE) +
+      ggplot2::scale_fill_manual(values = pal, name = NULL, guide = "none")
+  }
   if (label > 0) {
     lab <- utils::head(f[order(-f$FNov_raw), ], label)
     p <- p + ggplot2::geom_text(data = lab, ggplot2::aes(a1, a2, label = species),
@@ -887,6 +916,49 @@ plot_groups <- function(space, groups, axes = c(1, 2), sep = NULL, recode = NULL
   }
   p + ggplot2::labs(subtitle = sprintf("Grey: reference (%s); hull position on the first %d axes",
                                        rf$ref_label, x$settings$hull_axes)) + theme
+}
+
+#' Centroids of species groups in functional spaces
+#'
+#' Position of the centroid (mean coordinates of its species, as used for
+#' `FDis` and `centroid_dist` in [group_overlap()]) of each group on the
+#' axes of one or several functional spaces. A species in several groups
+#' counts in each of them.
+#'
+#' @inheritParams group_species
+#' @param space An `fs_space`, or a list of them (output of
+#'   [build_spaces()]).
+#' @param n_axes Number of axes reported (`NULL`: all axes of the space).
+#' @return Data frame with `space`, `group`, `n` (number of species) and
+#'   `PCoA1`, `PCoA2`... (centroid coordinates; `NA` beyond the axes of a
+#'   space).
+#' @examples
+#' data(birds_traits); data(birds_trait_info)
+#' tr <- drop_incomplete(prepare_traits(birds_traits, birds_trait_info, "species"))
+#' s <- build_space(tr, "Locomotion")
+#' g <- setNames(birds_traits$iucn, birds_traits$species)
+#' group_centroids(s, g, n_axes = 3)
+#' @export
+group_centroids <- function(space, groups, sep = NULL, recode = NULL, levels = NULL, n_axes = NULL) {
+  if (!inherits(space, "fs_space")) {
+    out <- lapply(space, group_centroids, groups = groups, sep = sep, recode = recode,
+                  levels = levels, n_axes = n_axes)
+    nm <- unique(unlist(lapply(out, names)))
+    out <- lapply(out, function(z) { z[setdiff(nm, names(z))] <- NA; z[nm] })
+    return(do.call(rbind, out))
+  }
+  X <- .space_coords(space, n_axes)
+  gr <- .as_groups(groups, rownames(X), sep = sep, recode = recode, levels = levels)
+  rows <- lapply(colnames(gr$M), function(g) {
+    i <- gr$M[, g]
+    if (!any(i)) return(NULL)
+    data.frame(space = space$name, group = g, n = sum(i),
+               t(colMeans(X[i, , drop = FALSE])), check.names = FALSE, stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, rows)
+  colnames(out)[-(1:3)] <- paste0("PCoA", seq_len(ncol(X)))
+  rownames(out) <- NULL
+  out
 }
 
 #' Plot group overlap or separation across functional spaces

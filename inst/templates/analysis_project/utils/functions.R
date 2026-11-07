@@ -2,10 +2,24 @@
 # Helpers shared by the scripts (reading the data, writing tables and figures)
 # ============================================================================
 
-# The trait table as archived in data/raw (one row per species).
+# The trait table as archived in data/raw (one row per species, or per record
+# when a species is repeated: individuals, populations...). Repeated species get
+# one identifier per record (record_ids()); their names stay in attr "species".
 read_traits_table <- function(file = PARAMS$data_file) {
-  utils::read.csv(file, check.names = FALSE, stringsAsFactors = FALSE,
-                  na.strings = c("NA", ""), encoding = "UTF-8")
+  d <- utils::read.csv(file, check.names = FALSE, stringsAsFactors = FALSE,
+                       na.strings = c("NA", ""), encoding = "UTF-8")
+  sp <- as.character(d[[PARAMS$species_col]])
+  if (anyDuplicated(sp[!is.na(sp)])) {
+    d[[PARAMS$species_col]] <- record_ids(sp)
+    attr(d, "species") <- sp
+  }
+  d
+}
+
+# Species of each record (named by record), NULL without repeated species.
+record_species <- function(data) {
+  sp <- attr(data, "species")
+  if (is.null(sp)) NULL else stats::setNames(sp, data[[PARAMS$species_col]])
 }
 
 # A named vector (names = species) from a column of the trait table, or NULL.

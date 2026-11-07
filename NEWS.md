@@ -1,5 +1,24 @@
 # DisentFunSpaces 0.8.0
 
+## Repeated species and group centroids
+
+* A species may now appear in several rows of the trait table (individuals,
+  populations, sexes, sites...): each row is a record placed in the spaces
+  with its own identifier. New `record_ids()` numbers the records of repeated
+  species (`"Salmo trutta_1"`, `"Salmo trutta_2"`...); `prepare_traits()`
+  gains `taxon` (species of each record, used to match the phylogeny in
+  `impute_traits()`); `community_from_long()` gains `records` (a species of
+  an assemblage is given all its records). The application detects repeated
+  species, numbers the records (groups, IUCN categories and imputation
+  predictors are read per row) and exports scripts and projects that do the
+  same.
+* New `group_centroids()`: coordinates of the centroid of each group in one
+  or several spaces. `plot_groups()` draws the centroids (`centroids = TRUE`,
+  diamonds; with a reference group, the reference centroid too). In the
+  application (tab 7), a 'Centroids' check box and a 'Centroids' table
+  (also in the .zip of results and as `TableS14_group_centroids` in the
+  exported project).
+
 ## Interactive figures in the application
 
 * All the figures of the Shiny application are interactive 'plotly' widgets

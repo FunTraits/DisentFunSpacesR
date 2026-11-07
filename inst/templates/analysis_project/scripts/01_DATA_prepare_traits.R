@@ -11,7 +11,8 @@ source("scripts/00_START_GeneralScript.R")
 traits_raw <- read_traits_table()
 trait_info <- utils::read.csv(PARAMS$trait_info_file, stringsAsFactors = FALSE)
 
-traits <- prepare_traits(traits_raw, trait_info, species_col = PARAMS$species_col)
+traits <- prepare_traits(traits_raw, trait_info, species_col = PARAMS$species_col,
+                         taxon = attr(traits_raw, "species"))
 print(traits)
 
 save_object(traits, "traits_prepared")

@@ -14,7 +14,8 @@
 #            TableS8_reference_species.csv, TableS9_group_contribution.csv)
 #            results/figures/Fig4_groups_<space>, Fig5_group_overlap
 #            (+ continuous variable: Table9, TableS12, Fig7_continuous_<space>;
-#               assemblages: TableS13_group_assemblages, Fig8_group_assemblages)
+#               assemblages: TableS13_group_assemblages, Fig8_group_assemblages;
+#               centroids of the groups: TableS14_group_centroids)
 # ============================================================================
 source("scripts/00_START_GeneralScript.R")
 
@@ -60,7 +61,8 @@ if (!is.null(gp)) {
   comm <- if (!is.null(gp$sites)) {
     a <- utils::read.csv(file.path("data", "raw", "assemblages.csv"), check.names = FALSE,
                          stringsAsFactors = FALSE)
-    community_from_long(a, gp$sites$site_col, gp$sites$species_col, gp$sites$group_col)
+    community_from_long(a, gp$sites$site_col, gp$sites$species_col, gp$sites$group_col,
+                        records = record_species(traits_raw))
   }
 
   grp <- groups_all(spaces, groups, reference = gp$reference, pool_focal = gp$pool_focal,
@@ -75,6 +77,8 @@ if (!is.null(gp)) {
 
   save_table(summary_groups(grp), "Table5_groups_summary")
   save_table(grp$groups, "TableS6_groups")
+  save_table(group_centroids(spaces, groups, sep = gp$sep, recode = gp$recode, levels = gp$levels,
+                             n_axes = PARAMS$n_axes), "TableS14_group_centroids")
   if (!is.null(grp$pairs) && nrow(grp$pairs)) {
     save_table(grp$pairs, "Table6_group_pairs")
     save_figure(plot_group_overlap(grp, "overlap"), "Fig5_group_overlap")

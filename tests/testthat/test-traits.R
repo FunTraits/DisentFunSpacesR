@@ -95,3 +95,25 @@ test_that("all pairs of example species share traits in every dimension", {
     expect_false(anyNA(trait_distance(tr, dm, engine = "fast")), label = dm)
   expect_false(anyNA(birds_traits$adult_body_mass))
 })
+
+test_that("repeated species are kept as records with their own identifiers", {
+  expect_equal(record_ids(c("a", "b", "a", "a")), c("a_1", "b", "a_2", "a_3"))
+  expect_equal(record_ids(c("a", "b")), c("a", "b"))
+  expect_false(anyDuplicated(record_ids(c("a", "a_1", "a"))) > 0)
+  d <- birds_traits[1:60, ]
+  d <- rbind(d, d[1:10, ])
+  expect_error(prepare_traits(d, birds_trait_info, "species"), "record_ids")
+  sp <- d$species; d$species <- record_ids(sp)
+  tr <- prepare_traits(d, birds_trait_info, "species", taxon = sp)
+  expect_equal(length(tr$species), 70)
+  expect_equal(unname(tr$taxon[d$species]), sp)
+  sub <- subset_species(tr, tr$species[1:5])
+  expect_equal(names(sub$taxon), sub$species)
+  s <- build_space(tr, "Diet")
+  expect_equal(nrow(s$coords), 70)
+  # assemblages list species: each gets all its records
+  cm <- community_from_long(data.frame(site = c("s1", "s1", "s2"), species = sp[c(1, 11, 2)]),
+                            records = stats::setNames(sp, d$species))
+  expect_setequal(colnames(cm$comm), c(d$species[sp == sp[1]], d$species[sp == sp[2]], sp[11]))
+  expect_equal(sum(cm$comm["s1", ]), 3)
+})

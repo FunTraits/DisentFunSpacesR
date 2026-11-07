@@ -223,7 +223,8 @@ app_ui <- function() {
             shiny::selectInput("sep", "Separator (text files)",
                                c("Auto-detect" = "auto", "Comma" = ",", "Semicolon" = ";",
                                  "Tab" = "\t", "Pipe" = "|"), selected = "auto")),
-          shiny::selectInput("species_col", "Species column", choices = NULL),
+          shiny::selectInput("species_col", "Species column (a species may be repeated: one row per record)",
+                             choices = NULL),
           shiny::selectInput("iucn_col", "IUCN category column (optional, for FUSE)", choices = NULL),
           shiny::selectizeInput("group_cols", "Other variables, not traits (optional: groups, continuous attributes)", choices = NULL,
                                 multiple = TRUE,
@@ -530,11 +531,12 @@ app_ui <- function() {
                     shiny::uiOutput("grp_focal_summary_ui")),
         bslib::layout_columns(col_widths = c(7, 5),
           bslib::card(full_screen = TRUE,
-            bslib::card_header(bslib::layout_columns(col_widths = c(5, 2, 2, 3),
+            bslib::card_header(bslib::layout_columns(col_widths = c(4, 2, 2, 2, 2),
               shiny::selectInput("grp_space", NULL, choices = NULL),
               shiny::numericInput("grp_ax1", NULL, 1, 1, 20),
               shiny::numericInput("grp_ax2", NULL, 2, 1, 20),
-              shiny::checkboxInput("grp_contours", "Densities", FALSE))),
+              shiny::checkboxInput("grp_contours", "Densities", FALSE),
+              shiny::checkboxInput("grp_centroids", "Centroids", TRUE))),
             .fig_output("grp_plot", height = "440px")),
           bslib::card(full_screen = TRUE,
             bslib::card_header(bslib::layout_columns(col_widths = c(5, 7),
@@ -554,6 +556,7 @@ app_ui <- function() {
         bslib::navset_card_tab(
           bslib::nav_panel("Groups", DT::DTOutput("grp_groups_table")),
           bslib::nav_panel("Pairs of groups", DT::DTOutput("grp_pairs_table")),
+          bslib::nav_panel("Centroids", DT::DTOutput("grp_centroids_table")),
           bslib::nav_panel("Species mixing", DT::DTOutput("grp_species_table")),
           bslib::nav_panel("Focal species", DT::DTOutput("grp_focal_table")),
           bslib::nav_panel("Reference species", DT::DTOutput("grp_ref_table")),
@@ -641,7 +644,7 @@ app_server <- function(input, output, session) {
                                        options = list(pageLength = 10, scrollX = TRUE))
 
   # ---- 1. data --------------------------------------------------------------
-  raw <- shiny::reactive({
+  raw_file <- shiny::reactive({
     if (input$src %in% c("example", "example_all")) {
       nm <- if (input$src == "example") "birds_traits" else "birds_traits_all"
       e <- new.env(); utils::data(list = nm, package = "DisentFunSpaces", envir = e)
@@ -658,11 +661,31 @@ app_server <- function(input, output, session) {
       }
     }, error = function(e) { notify_error(e); NULL })
   })
+  # the table used by the analyses: species repeated in several rows (records:
+  # individuals, populations...) get one identifier per record (record_ids());
+  # the original names are kept in attribute "species"
+  raw <- shiny::reactive({
+    d <- raw_file(); shiny::req(d)
+    sc <- input$species_col
+    if (!is.null(sc) && sc %in% names(d)) {
+      sp <- as.character(d[[sc]])
+      if (anyDuplicated(sp[!is.na(sp)])) {
+        d[[sc]] <- record_ids(sp)
+        attr(d, "species") <- sp
+      }
+    }
+    d
+  })
+  # species of each record (named by record), NULL without repeated species
+  rec_map <- shiny::reactive({
+    d <- raw(); sp <- attr(d, "species")
+    if (is.null(sp)) NULL else stats::setNames(sp, d[[input$species_col]])
+  })
   data_name <- shiny::reactive(switch(input$src, example = "birds_traits.csv",
                                      example_all = "birds_traits_all.csv", input$file$name))
 
-  shiny::observeEvent(raw(), {
-    d <- raw(); shiny::req(d)
+  shiny::observeEvent(raw_file(), {
+    d <- raw_file(); shiny::req(d)
     cols <- names(d)
     guess_sp <- cols[which(tolower(cols) %in% c("species", "sp", "taxon", "scientificname",
                                                 "scientificnamestd", "binomial"))[1]]
@@ -682,26 +705,38 @@ app_server <- function(input, output, session) {
   })
 
   read_sep <- shiny::reactive({
-    d <- raw()
+    d <- raw_file()
     s <- attr(d, "sep"); if (is.null(s)) s <- if (identical(input$sep, "auto")) "," else input$sep
     dc <- attr(d, "dec"); if (is.null(dc)) dc <- "."
     list(sep = s, dec = dc)
   })
   output$data_info <- shiny::renderUI({
-    d <- raw(); shiny::req(d)
+    d <- raw_file(); shiny::req(d)
+    rm <- rec_map()
     rs <- read_sep()
     sep_txt <- if (!is.null(attr(d, "sep")))
       sprintf(" - separator: %s, decimal mark: '%s'",
               c(";" = "semicolon", "\t" = "tab", "," = "comma", "|" = "pipe")[[rs$sep]], rs$dec)
     else ""
     shiny::tagList(
-      shiny::tags$p(sprintf("%d species x %d columns - %.1f%% missing cells%s",
-                            nrow(d), ncol(d), 100 * mean(is.na(d)), sep_txt)),
+      shiny::tags$p(sprintf("%d %s x %d columns - %.1f%% missing cells%s",
+                            nrow(d), if (is.null(rm)) "species" else "rows", ncol(d),
+                            100 * mean(is.na(d)), sep_txt)),
+      if (!is.null(rm)) {
+        n_rep <- sum(table(rm) > 1)
+        shiny::tags$div(class = "alert alert-info", style = "font-size: 0.9rem;",
+          shiny::tags$b("Repeated species. "),
+          sprintf(paste0("%d rows for %d species (%d species in several rows). Each row is a record",
+                         " (individual, population...) placed in the spaces with its own identifier",
+                         " (e.g. '%s'). Groups and IUCN categories are read per row; assemblages",
+                         " list species, which are given all their records."),
+                  length(rm), length(unique(rm)), n_rep, names(rm)[duplicated(rm)][1]))
+      },
       if (ncol(d) == 1L) shiny::tags$div(class = "alert alert-warning",
         "Only one column was read: check the separator of the file."))
   })
   output$perf_info <- shiny::renderUI({
-    d <- raw(); shiny::req(d)
+    d <- raw_file(); shiny::req(d)
     n <- nrow(d)
     if (n < .app_large_n()) return(NULL)
     gb <- 8 * n^2 / 1024^3
@@ -719,7 +754,7 @@ app_server <- function(input, output, session) {
         " R uses its reference BLAS: an optimised BLAS (Accelerate on macOS, OpenBLAS on",
         " Linux) makes PCoA and Procrustes tests several times faster."))
   })
-  output$data_preview <- DT::renderDT(DT::datatable(raw(), options = list(scrollX = TRUE, pageLength = 10),
+  output$data_preview <- DT::renderDT(DT::datatable(raw_file(), options = list(scrollX = TRUE, pageLength = 10),
                                                     rownames = FALSE), server = TRUE)
 
   # ---- 2. trait information --------------------------------------------------
@@ -828,7 +863,7 @@ app_server <- function(input, output, session) {
     res <- tryCatch({
       w <- NULL
       tr <- withCallingHandlers(
-        prepare_traits(raw(), ti, species_col = input$species_col),
+        prepare_traits(raw(), ti, species_col = input$species_col, taxon = attr(raw(), "species")),
         warning = function(wn) { w <<- c(w, conditionMessage(wn)); invokeRestart("muffleWarning") })
       list(tr = tr, w = w)
     }, error = function(e) { notify_error(e); NULL })
@@ -1223,7 +1258,7 @@ app_server <- function(input, output, session) {
     d <- grp_sites_raw(); if (is.null(d)) return(NULL)
     shiny::req(input$grp_site_col %in% names(d), input$grp_site_sp_col %in% names(d))
     gc <- if (isTRUE(nzchar(input$grp_site_grp_col))) input$grp_site_grp_col else NULL
-    tryCatch(community_from_long(d, input$grp_site_col, input$grp_site_sp_col, gc),
+    tryCatch(community_from_long(d, input$grp_site_col, input$grp_site_sp_col, gc, records = rec_map()),
              error = function(e) { notify_error(e); NULL })
   })
   grp_sep <- shiny::reactive({
@@ -1392,9 +1427,10 @@ app_server <- function(input, output, session) {
       r <- list(focal = x$focal[x$focal$space == input$grp_space, -1],
                 settings = list(hull_axes = min(input$grp_hull_axes, ncol(s$coords))))
       plot_groups(s, set$groups, axes = ax, sep = set$sep, recode = set$recode, levels = set$levels,
-                  reference = set$reference, pool_focal = isTRUE(input$grp_pool), x = r, label = 5)
+                  reference = set$reference, pool_focal = isTRUE(input$grp_pool), x = r, label = 5,
+                  centroids = isTRUE(input$grp_centroids))
     } else plot_groups(s, set$groups, axes = ax, sep = set$sep, recode = set$recode, levels = set$levels,
-                       contours = isTRUE(input$grp_contours))
+                       contours = isTRUE(input$grp_contours), centroids = isTRUE(input$grp_centroids))
   })
   output$grp_plot <- .render_fig(grp_plot_r())
   output$grp_overlap_plot <- .render_fig({
@@ -1407,6 +1443,14 @@ app_server <- function(input, output, session) {
   })
   output$grp_groups_table <- DT::renderDT({ shiny::req(rv$groups); dt_page(rv$groups$groups) })
   output$grp_pairs_table <- DT::renderDT({ shiny::req(rv$groups$pairs); dt_page(rv$groups$pairs) })
+  # centroids of the groups in every space (axes retained for the metrics)
+  grp_centroids_r <- shiny::reactive({
+    shiny::req(rv$groups, rv$spaces); set <- rv$grp_set
+    tryCatch(group_centroids(rv$spaces, set$groups, sep = set$sep, recode = set$recode,
+                             levels = set$levels, n_axes = n_axes_val()),
+             error = function(e) NULL)
+  })
+  output$grp_centroids_table <- DT::renderDT({ shiny::req(grp_centroids_r()); dt_page(grp_centroids_r()) })
   output$grp_species_table <- DT::renderDT({ shiny::req(rv$groups); dt_page(rv$groups$species) })
   output$grp_focal_table <- DT::renderDT({
     shiny::validate(shiny::need(rv$groups$focal, "Choose a reference group to analyse focal species."))
@@ -1426,7 +1470,7 @@ app_server <- function(input, output, session) {
     shiny::req(rv$spaces)
     sp_all <- c(default_spaces(rv$traits), rv$custom)
     list(data_file = data_name(), trait_info_file = "trait_info.csv",
-         species_col = input$species_col,
+         species_col = input$species_col, records = !is.null(rec_map()),
          iucn_col = if (isTRUE(nzchar(input$iucn_col))) input$iucn_col else NULL,
          group_col = if (identical(input$grp_src, "binary") && length(input$grp_bin_cols)) input$grp_bin_cols else
            if (isTRUE(nzchar(input$grp_col)) && !identical(input$grp_src, "simulate")) input$grp_col else NULL,
@@ -1472,6 +1516,7 @@ app_server <- function(input, output, session) {
         utils::write.csv(rv$covariate$species, file.path(d, "continuous_species.csv"), row.names = FALSE)
       }
       tabs <- if (is.null(x)) list() else list(groups_summary = summary_groups(x), groups = x$groups, pairs = x$pairs,
+                   centroids = tryCatch(grp_centroids_r(), error = function(e) NULL),
                    tests = x$test, species_mixing = x$species, focal_summary =
                      if (!is.null(x$focal)) summary_groups(x, "focal"),
                    focal_species = x$focal, reference_species = x$reference,
@@ -1588,7 +1633,7 @@ app_server <- function(input, output, session) {
   prj_preview <- shiny::reactive({
     shiny::req(rv$spaces)
     p <- prj_params(); st <- prj_steps(); nm <- prj_name()
-    ti <- current_ti(); d <- raw()
+    ti <- current_ti(); d <- raw_file()
     if (!is.null(prev_preview)) unlink(prev_preview, recursive = TRUE)
     prev_preview <<- tempfile("prj_preview_")
     dir <- file.path(prev_preview, nm)
@@ -1632,7 +1677,7 @@ app_server <- function(input, output, session) {
     if (!is.null(rv$prj_job) && rv$prj_job$is_alive()) return()
     base <- tempfile("prj_"); dir.create(base)
     dir <- file.path(base, prj_name())
-    args <- list(data = raw(), trait_info = current_ti(), dir = dir, params = prj_params(),
+    args <- list(data = raw_file(), trait_info = current_ti(), dir = dir, params = prj_params(),
                  phylo = if (!is.null(prj_phylo())) ape::read.tree(prj_phylo()), steps = prj_steps(),
                  assemblages = if (!is.null(rv$groups)) rv$grp_set$sites$data,
                  title = input$prj_title, author = input$prj_author, data_source = data_name(),

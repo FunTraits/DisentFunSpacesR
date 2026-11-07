@@ -241,3 +241,40 @@ test_that("the Procrustes figure is drawn with a few traces, whatever the number
   expect_true(all(rownames(sp$Diet$coords) %in% unlist(lapply(g$x$data, function(t)
     sub("<br>.*$", "", t$text)))))
 })
+
+test_that("app accepts repeated species (records) and shows group centroids", {
+  f <- tempfile(fileext = ".csv")
+  d <- birds_traits[1:200, setdiff(names(birds_traits), c("family"))]
+  d <- rbind(d, d[1:30, ])
+  d$wing_length[201:230] <- d$wing_length[201:230] * 1.05
+  utils::write.csv(d, f, row.names = FALSE)
+  shiny::testServer(DisentFunSpaces:::app_server, {
+    session$setInputs(src = "upload", sep = ",", file = list(datapath = f, name = "records.csv"))
+    session$setInputs(species_col = "species", iucn_col = "iucn", group_cols = "order")
+    expect_equal(nrow(raw()), 230)
+    expect_false(anyDuplicated(raw()$species) > 0)
+    expect_equal(length(rec_map()), 230)
+    session$setInputs(bulk_dim = "Diet", bulk_rows = grep("^diet_", rv$ti$trait, value = TRUE), bulk_apply = 1)
+    session$setInputs(validate = 1)
+    expect_equal(length(rv$traits$species), 230)
+    expect_equal(length(unique(rv$traits$taxon)), 200)
+    session$setInputs(missing = "keep", run_missing = 1)
+    session$setInputs(spaces_sel = c("Diet", "Combined"), weighting = "variable",
+                      correction = "none", run_spaces = 1)
+    expect_equal(nrow(rv$spaces$Diet$coords), 230)
+    session$setInputs(axes_mode = "all", k_nn = 5)
+    session$setInputs(grp_src = "column", grp_col = "iucn", grp_sep = "",
+                      grp_recode = "threatened = VU, EN, CR\nother = LC, NT")
+    session$setInputs(grp_levels = c("threatened", "other"), grp_ref = character(0), grp_null = "none",
+                      grp_hull_axes = 3, grp_density = FALSE, run_groups = 1)
+    expect_s3_class(rv$groups, "fs_groups_all")
+    ce <- grp_centroids_r()
+    expect_setequal(ce$group, c("threatened", "other"))
+    expect_equal(sum(ce$n[ce$space == "Diet"]), sum(!is.na(d$iucn) & d$iucn %in% c("VU", "EN", "CR", "LC", "NT")))
+    session$setInputs(grp_space = "Diet", grp_ax1 = 1, grp_ax2 = 2, grp_contours = FALSE, grp_centroids = TRUE)
+    expect_s3_class(grp_plot_r(), "ggplot")
+    p <- script_params()
+    expect_true(p$records)
+    expect_match(analysis_script(p), "record_ids", fixed = TRUE)
+  })
+})

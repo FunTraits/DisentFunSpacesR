@@ -9,7 +9,8 @@ community_from_long(
   site_col = "site",
   species_col = "species",
   group_col = NULL,
-  abundance_col = NULL
+  abundance_col = NULL,
+  records = NULL
 )
 }
 \arguments{
@@ -21,6 +22,11 @@ community_from_long(
 assemblage (e.g. native / introduced in that basin).}
 
 \item{abundance_col}{Optional column of abundances (otherwise presence).}
+
+\item{records}{Optional, when the trait table has several records per
+species (see [record_ids()]): species of each record, named by record
+identifier. A species of the long table is then replaced by all its
+records (each with the abundance and group of the species).}
 }
 \value{
 A list: `comm` (numeric matrix, assemblages x species) and

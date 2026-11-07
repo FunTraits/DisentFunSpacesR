@@ -5,7 +5,8 @@
 #' manuscript).
 #'
 #' @param p Named list of settings (`data_file`, `trait_info_file`,
-#'   `species_col`, `iucn_col`, `sep` (optionally `dec`), `missing`, `phylo_file`,
+#'   `species_col`, `records` (`TRUE` when species are repeated: records
+#'   numbered with [record_ids()]), `iucn_col`, `sep` (optionally `dec`), `missing`, `phylo_file`,
 #'   `n_phylo_axes`, `ntree`, `cov_cols`, `spaces`, `weighting`, `correction`,
 #'   `method`, `nrepet`, `n_axes`, `mantel`, `k`; optionally `engine`,
 #'   `eigen`, `keep_dist`, `cores` (large datasets), `group_col` (several
@@ -29,6 +30,10 @@ analysis_script <- function(p) {
     sprintf('traits_raw <- read.table("%s", header = TRUE, sep = "%s", dec = "%s", quote = "\\"",\n                         stringsAsFactors = FALSE, check.names = FALSE)',
             p$data_file, if (sep == "\t") "\\t" else sep, dec)
   }
+  rec_code <- if (isTRUE(p$records)) sprintf(paste0(
+    '\n# several rows (records) per species: one identifier per record\n',
+    'species <- traits_raw[["%s"]]\n',
+    'traits_raw[["%s"]] <- record_ids(species)'), p$species_col, p$species_col) else ""
   miss <- switch(p$missing,
     keep = "# Missing values kept: handled pairwise by the generalised Gower distance",
     drop = "traits <- drop_incomplete(traits)",
@@ -79,9 +84,10 @@ library(DisentFunSpaces)
 set.seed(', p$seed, ')
 
 ## 1. Data and trait description
-', read_data, '
+', read_data, rec_code, '
 trait_info <- read.csv("', p$trait_info_file, '", stringsAsFactors = FALSE)
-traits <- prepare_traits(traits_raw, trait_info, species_col = "', p$species_col, '")
+traits <- prepare_traits(traits_raw, trait_info, species_col = "', p$species_col, '"',
+  if (isTRUE(p$records)) ', taxon = species' else '', ')
 traits
 
 ## 2. Missing values

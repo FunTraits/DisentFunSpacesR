@@ -194,3 +194,22 @@ test_that("groups_from_columns turns indicator columns into non-exclusive groups
   expect_setequal(unique(r$focal$group), c("u1", "u2"))
   expect_true(is.na(r$test$permanova_R2))
 })
+
+test_that("group centroids are the mean coordinates and are drawn by plot_groups", {
+  s <- grp_setup()
+  ce <- group_centroids(s$sp$Combined, s$iucn, recode = s$rec, n_axes = 3)
+  expect_named(ce, c("space", "group", "n", "PCoA1", "PCoA2", "PCoA3"))
+  X <- s$sp$Combined$coords
+  thr <- names(s$iucn)[s$iucn %in% c("VU", "EN", "CR")]
+  expect_equal(unlist(ce[ce$group == "threatened", c("PCoA1", "PCoA2", "PCoA3")]),
+               colMeans(X[thr, 1:3]), ignore_attr = TRUE)
+  expect_equal(ce$n[ce$group == "threatened"], length(thr))
+  all_sp <- group_centroids(s$sp, s$iucn, recode = s$rec)
+  expect_setequal(unique(all_sp$space), names(s$sp))
+  n_layers <- function(p) length(p$layers)
+  expect_equal(n_layers(plot_groups(s$sp$Combined, s$iucn, recode = s$rec)),
+               n_layers(plot_groups(s$sp$Combined, s$iucn, recode = s$rec, centroids = FALSE)) + 1)
+  expect_equal(n_layers(plot_groups(s$sp$Combined, s$iucn, recode = s$rec, reference = "other")),
+               n_layers(plot_groups(s$sp$Combined, s$iucn, recode = s$rec, reference = "other",
+                                    centroids = FALSE)) + 2)
+})

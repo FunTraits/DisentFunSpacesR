@@ -20,15 +20,27 @@
 #' @param group_col Optional column of the group of the species in the
 #'   assemblage (e.g. native / introduced in that basin).
 #' @param abundance_col Optional column of abundances (otherwise presence).
+#' @param records Optional, when the trait table has several records per
+#'   species (see [record_ids()]): species of each record, named by record
+#'   identifier. A species of the long table is then replaced by all its
+#'   records (each with the abundance and group of the species).
 #' @return A list: `comm` (numeric matrix, assemblages x species) and
 #'   `groups` (character matrix of the same dimensions, `NA` where absent;
 #'   `NULL` without `group_col`).
 #' @export
 community_from_long <- function(data, site_col = "site", species_col = "species",
-                                group_col = NULL, abundance_col = NULL) {
+                                group_col = NULL, abundance_col = NULL, records = NULL) {
   data <- as.data.frame(data, stringsAsFactors = FALSE)
   for (cl in c(site_col, species_col, group_col, abundance_col))
     if (!cl %in% names(data)) stop("Column '", cl, "' not found.", call. = FALSE)
+  if (!is.null(records) && length(records)) {
+    if (is.null(names(records))) stop("`records` must be named by record identifier.", call. = FALSE)
+    rec <- split(names(records), as.character(records))
+    sp0 <- as.character(data[[species_col]])
+    ids <- lapply(sp0, function(z) if (!is.na(z) && z %in% names(rec)) rec[[z]] else z)
+    data <- data[rep(seq_len(nrow(data)), lengths(ids)), , drop = FALSE]
+    data[[species_col]] <- unlist(ids, use.names = FALSE)
+  }
   s <- as.character(data[[site_col]]); sp <- as.character(data[[species_col]])
   ok <- !is.na(s) & !is.na(sp) & nzchar(s) & nzchar(sp)
   s <- s[ok]; sp <- sp[ok]

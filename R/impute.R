@@ -75,15 +75,17 @@ impute_traits <- function(x, phylo = NULL, covariates = NULL, n_phylo_axes = 10,
   extra <- NULL
   if (!is.null(phylo)) {
     if (!inherits(phylo, "phylo")) stop("`phylo` must be an object of class 'phylo'.")
-    common <- intersect(x$species, phylo$tip.label)
-    if (length(common) < length(x$species)) {
-      warning(length(x$species) - length(common),
+    tips <- .taxon_of(x)  # records of a repeated species share its tip
+    common <- intersect(unique(tips), phylo$tip.label)
+    if (length(common) < length(unique(tips))) {
+      warning(length(unique(tips)) - length(common),
               " species absent from the phylogeny get NA eigenvectors (imputed too).")
     }
     tree <- ape::keep.tip(phylo, common)
     ev <- stats::cmdscale(ape::cophenetic.phylo(tree), k = min(n_phylo_axes, length(common) - 1))
     colnames(ev) <- paste0("PhyloEigen.", seq_len(ncol(ev)))
-    extra <- as.data.frame(ev)[x$species, , drop = FALSE]
+    extra <- as.data.frame(ev)[tips, , drop = FALSE]
+    rownames(extra) <- x$species
   }
   if (!is.null(covariates)) {
     covariates <- as.data.frame(covariates)

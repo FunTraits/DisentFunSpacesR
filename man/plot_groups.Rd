@@ -18,7 +18,8 @@ plot_groups(
   hull_axes = 4,
   hulls = TRUE,
   label = 0,
-  contours = FALSE
+  contours = FALSE,
+  centroids = TRUE
 )
 }
 \arguments{
@@ -59,6 +60,10 @@ a reference).}
 
 \item{contours}{Draw density contours of each group (2-D kernel density
 on the plotted axes) instead of hulls?}
+
+\item{centroids}{Draw the centroid of each group (mean position of its
+species, see [group_centroids()]) as a large diamond outlined in black?
+With `reference`, the centroid of the reference species is drawn too.}
 }
 \value{
 A ggplot.

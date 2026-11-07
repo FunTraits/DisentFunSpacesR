@@ -12,18 +12,26 @@
 #' @param data Data frame of traits, species in rows.
 #' @param trait_info Trait-information table (see [check_trait_info()]).
 #' @param species_col Name of the column holding species identifiers. If
-#'   `NULL`, row names of `data` are used.
+#'   `NULL`, row names of `data` are used. Identifiers must be unique: when
+#'   a species is repeated (several records per species: individuals,
+#'   populations, sites...), give one identifier per record with
+#'   [record_ids()] and the species of each record in `taxon`.
+#' @param taxon Optional vector, one value per row of `data`: the species
+#'   (taxon) of each record when rows are records rather than species (see
+#'   [record_ids()]). Stored as `taxon` (named by record) and used to match
+#'   the phylogeny in [impute_traits()].
 #'
 #' @return An object of class `fs_traits`: a list with `data` (prepared
 #'   traits, species as row names), `trait_info` (validated table),
-#'   `species`, `imputed` (logical) and `missing` (per-trait proportion of
-#'   missing values after preparation).
+#'   `species`, `imputed` (logical), `missing` (per-trait proportion of
+#'   missing values after preparation) and, with `taxon`, `taxon` (species
+#'   of each record, named by record).
 #' @export
 #' @examples
 #' data(birds_traits); data(birds_trait_info)
 #' tr <- prepare_traits(birds_traits, birds_trait_info, species_col = "species")
 #' tr
-prepare_traits <- function(data, trait_info, species_col = NULL) {
+prepare_traits <- function(data, trait_info, species_col = NULL, taxon = NULL) {
   data <- as.data.frame(data, stringsAsFactors = FALSE)
   if (!is.null(species_col)) {
     if (!species_col %in% names(data)) stop("Column '", species_col, "' not found.")
@@ -34,7 +42,13 @@ prepare_traits <- function(data, trait_info, species_col = NULL) {
   if (anyNA(sp) || any(sp == "")) stop("Missing species identifiers.")
   if (anyDuplicated(sp)) {
     stop("Duplicated species identifiers (e.g. '", sp[duplicated(sp)][1],
-         "'). Aggregate intraspecific records before building species-level spaces.")
+         "'). To keep several records per species (one point per record), give one identifier ",
+         "per record with record_ids() and the species in `taxon`; otherwise aggregate the records.",
+         call. = FALSE)
+  }
+  if (!is.null(taxon)) {
+    if (length(taxon) != length(sp)) stop("`taxon` must have one value per row of `data`.", call. = FALSE)
+    taxon <- stats::setNames(as.character(taxon), sp)
   }
 
   ti <- check_trait_info(trait_info, data)
@@ -123,9 +137,41 @@ prepare_traits <- function(data, trait_info, species_col = NULL) {
     trait_info = ti,
     species = sp,
     imputed = FALSE,
-    missing = colMeans(is.na(out))
+    missing = colMeans(is.na(out)),
+    taxon = taxon
   ), class = "fs_traits")
 }
+
+#' Identifiers of records when species are repeated
+#'
+#' A trait table may hold several rows per species (individuals,
+#' populations, sexes, sites...), each to be placed in the functional
+#' spaces. Every row then needs its own identifier: `record_ids()` keeps the
+#' name of species present once and numbers the records of repeated species
+#' (`"Salmo trutta_1"`, `"Salmo trutta_2"`...). Give the result as species
+#' column of the trait table and of the other per-species columns (groups,
+#' IUCN category...), and the original names as `taxon` in
+#' [prepare_traits()]; [community_from_long()] maps the species of
+#' assemblages to their records with `records`.
+#'
+#' @param species Character vector of species names, one per row.
+#' @param sep Separator between the name and the number of the record.
+#' @return A character vector of unique identifiers (`species` unchanged
+#'   when no species is repeated).
+#' @examples
+#' record_ids(c("a", "b", "a", "c", "a"))
+#' @export
+record_ids <- function(species, sep = "_") {
+  sp <- as.character(species)
+  dup <- !is.na(sp) & (duplicated(sp) | duplicated(sp, fromLast = TRUE))
+  if (!any(dup)) return(sp)
+  num <- stats::ave(seq_along(sp), sp, FUN = seq_along)
+  sp[dup] <- paste0(sp[dup], sep, num[dup])
+  make.unique(sp, sep = sep)
+}
+
+## Internal: species of the records (taxon if given, else the identifiers)
+.taxon_of <- function(x) if (is.null(x$taxon)) x$species else unname(x$taxon[x$species])
 
 .transform <- function(x, how) {
   n0 <- sum(!is.na(x))
@@ -157,7 +203,9 @@ prepare_traits <- function(data, trait_info, species_col = NULL) {
 #' @export
 print.fs_traits <- function(x, ...) {
   ti <- x$trait_info
-  cat("<fs_traits>", length(x$species), "species,", nrow(ti), "trait columns",
+  cat("<fs_traits>", length(x$species),
+      if (is.null(x$taxon)) "species," else sprintf("records of %d species,", length(unique(x$taxon))),
+      nrow(ti), "trait columns",
       if (x$imputed) "(imputed)" else "", "\n")
   tab <- trait_summary(x)
   print(tab, row.names = FALSE)
@@ -209,6 +257,7 @@ subset_species <- function(x, species) {
   keep <- x$species %in% species
   x$data <- x$data[keep, , drop = FALSE]
   x$species <- x$species[keep]
+  if (!is.null(x$taxon)) x$taxon <- x$taxon[x$species]
   x$missing <- colMeans(is.na(x$data))
   x
 }

@@ -4,7 +4,7 @@
 \alias{prepare_traits}
 \title{Prepare a trait table for functional-space analyses}
 \usage{
-prepare_traits(data, trait_info, species_col = NULL)
+prepare_traits(data, trait_info, species_col = NULL, taxon = NULL)
 }
 \arguments{
 \item{data}{Data frame of traits, species in rows.}
@@ -12,13 +12,22 @@ prepare_traits(data, trait_info, species_col = NULL)
 \item{trait_info}{Trait-information table (see [check_trait_info()]).}
 
 \item{species_col}{Name of the column holding species identifiers. If
-`NULL`, row names of `data` are used.}
+`NULL`, row names of `data` are used. Identifiers must be unique: when
+a species is repeated (several records per species: individuals,
+populations, sites...), give one identifier per record with
+[record_ids()] and the species of each record in `taxon`.}
+
+\item{taxon}{Optional vector, one value per row of `data`: the species
+(taxon) of each record when rows are records rather than species (see
+[record_ids()]). Stored as `taxon` (named by record) and used to match
+the phylogeny in [impute_traits()].}
 }
 \value{
 An object of class `fs_traits`: a list with `data` (prepared
   traits, species as row names), `trait_info` (validated table),
-  `species`, `imputed` (logical) and `missing` (per-trait proportion of
-  missing values after preparation).
+  `species`, `imputed` (logical), `missing` (per-trait proportion of
+  missing values after preparation) and, with `taxon`, `taxon` (species
+  of each record, named by record).
 }
 \description{
 Converts each trait to the representation required by its declared type

@@ -254,7 +254,7 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
   "03_ANALYSIS_functional_spaces.R" = "Table2_spaces, TableS3/S4, Fig1_space_*, FigS1_inertia, FigS2_quality",
   "04_ANALYSIS_compare_spaces.R" = "Table3_procrustes, Fig2_procrustes",
   "05_ANALYSIS_species_metrics.R" = "Table4_metric_congruence, TableS5_species_metrics, Fig3_metric_congruence (+ Table8, TableS10-S11, Fig6_extinction_*)",
-  "06_ANALYSIS_groups.R" = "Table5_groups_summary, Table6_group_pairs (+ Table7, Table9, TableS6-S13), Fig4_groups_*, Fig5_group_overlap (+ Fig7, Fig8)")
+  "06_ANALYSIS_groups.R" = "Table5_groups_summary, Table6_group_pairs (+ Table7, Table9, TableS6-S14), Fig4_groups_*, Fig5_group_overlap (+ Fig7, Fig8)")
 
 # Settings completed with the defaults of the published analysis.
 .project_params <- function(p, ti, data, has_phylo = FALSE) {
@@ -480,6 +480,8 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
         "share of the group hull not shared with the other species",
         "mean proportion of the k nearest neighbours in the same group",
         "knn_same / its expectation under random labels")),
+    v("results/tables/TableS14_group_centroids.csv", c("n", "PCoA1, PCoA2..."),
+      c("species of the group", "coordinates of the group centroid (mean position of its species)")),
     v("results/tables/Table6_group_pairs.csv", c("V1, V2, V_inter", "overlap", "beta_jac, beta_jtu, beta_jne",
                                                  "p1_in_hull2, p2_in_hull1", "centroid_dist", "ses_*, p_*"),
       c("hull volumes of the two groups and of their intersection (relative to all species)",
