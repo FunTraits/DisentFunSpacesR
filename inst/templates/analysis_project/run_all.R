@@ -42,11 +42,11 @@ for (script in script_paths) {
 
 # 3. The Methods & Results report ----------------------------------------------
 if (requireNamespace("rmarkdown", quietly = TRUE) && rmarkdown::pandoc_available()) {
-  rmarkdown::render("manuscript/Methods_Results.Rmd", quiet = TRUE,
+  rmarkdown::render("report/Methods_Results.Rmd", quiet = TRUE,
                     envir = new.env(parent = globalenv()))
-  cat("OK  Report: manuscript/Methods_Results.docx\n")
+  cat("OK  Report: report/Methods_Results.docx\n")
 } else {
-  message("rmarkdown/pandoc not available: knit manuscript/Methods_Results.Rmd in RStudio.")
+  message("rmarkdown/pandoc not available: knit report/Methods_Results.Rmd in RStudio.")
 }
 
 writeLines(capture.output(sessionInfo()), "session_info.txt")

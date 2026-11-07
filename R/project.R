@@ -19,7 +19,7 @@
 #' |-- data/processed/  objects passed between scripts (.rds)
 #' |-- data/metadata.csv  definition of every variable
 #' |-- results/figures/, results/tables/
-#' |-- manuscript/   Methods_Results.Rmd (+ .docx once rendered)
+#' |-- report/       Methods_Results.Rmd (+ .docx once rendered)
 #' |-- run_all.R, <project>.Rproj, README.md, session_info.txt, .gitignore
 #' }
 #'
@@ -122,7 +122,7 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
 
   project <- basename(normalizePath(dir, mustWork = FALSE))
   for (d in c("scripts", "utils", "data/raw", "data/processed", "results/figures",
-              "results/tables", "manuscript"))
+              "results/tables", "report"))
     dir.create(file.path(dir, d), recursive = TRUE, showWarnings = FALSE)
 
   # --- data/raw -----------------------------------------------------------------
@@ -183,7 +183,7 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
   writeLines(enc2utf8(.project_parameters_r(p, title)), file.path(dir, "utils/parameters.R"),
              useBytes = TRUE)
   cp("run_all.R"); cp("README.md")
-  cp("manuscript/Methods_Results.Rmd")
+  cp("report/Methods_Results.Rmd")
   # named rproj.txt / gitignore.txt in the package: .Rbuildignore drops *.Rproj
   file.copy(file.path(tpl, "rproj.txt"), file.path(dir, paste0(project, ".Rproj")))
   file.copy(file.path(tpl, "gitignore.txt"), file.path(dir, ".gitignore"))

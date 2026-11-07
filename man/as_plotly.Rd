@@ -21,7 +21,7 @@ group or value) on hover; arrows (trait correlations) keep their heads; the
 subtitle is kept under the title; the camera button exports an SVG.
 }
 \examples{
-\dontshow{if (requireNamespace("plotly", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+\dontshow{if (requireNamespace("plotly", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 sp <- build_spaces(prepare_traits(birds_traits[1:200, ], birds_trait_info),
                    spaces = list(Diet = "Diet"))
 as_plotly(plot_space(sp$Diet))

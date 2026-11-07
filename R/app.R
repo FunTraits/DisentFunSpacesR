@@ -1774,16 +1774,16 @@ app_server <- function(input, output, session) {
   output$prj_report <- shiny::renderUI({
     r <- rv$prj_result
     if (is.null(r)) return(hint("Build the project to read the Methods & Results it writes."))
-    docx <- file.path(r$dir, "manuscript", "Methods_Results.docx")
+    docx <- file.path(r$dir, "report", "Methods_Results.docx")
     if (!file.exists(docx)) return(hint(if (!isTRUE(r$ok))
       "No report: the project was not run, or stopped before the report (see the Run log tab)." else
-      "No rendered report (pandoc not found): knit manuscript/Methods_Results.Rmd in RStudio."))
+      "No rendered report (pandoc not found): knit report/Methods_Results.Rmd in RStudio."))
     html <- tempfile(fileext = ".html")
     ok <- tryCatch({ rmarkdown::pandoc_convert(docx, to = "html", output = html,
                                                options = c("--embed-resources", "--standalone")); TRUE },
                    error = function(e) tryCatch({ rmarkdown::pandoc_convert(docx, to = "html", output = html,
                                                   options = "--self-contained"); TRUE }, error = function(e) FALSE))
-    if (!ok) return(hint("The report is in manuscript/Methods_Results.docx."))
+    if (!ok) return(hint("The report is in report/Methods_Results.docx."))
     body <- paste(readLines(html, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
     body <- sub("(?s).*<body[^>]*>", "", body, perl = TRUE); body <- sub("(?s)</body>.*", "", body, perl = TRUE)
     shiny::tags$div(class = "report", shiny::HTML(body))

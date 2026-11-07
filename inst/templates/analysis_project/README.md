@@ -33,7 +33,7 @@ R package [DisentFunSpaces](https://github.com/FunTraits/DisentFunSpacesR)
 │   ├── figures/              # Main (Fig*) and supplementary (FigS*) figures, .png and .pdf
 │   └── tables/               # Main (Table*) and supplementary (TableS*) tables, .csv
 │
-├── manuscript/
+├── report/
 │   ├── Methods_Results.Rmd   # Methods and Results, numbers read from results/tables
 │   └── Methods_Results.docx  # The same, rendered by run_all.R
 │

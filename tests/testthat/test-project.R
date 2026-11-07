@@ -12,7 +12,7 @@ test_that("write_analysis_project writes a complete, parseable project", {
   expect_true(all(c("run_all.R", "README.md", "birds_spaces.Rproj", ".gitignore", "session_info.txt",
                     "data/raw/traits.csv", "data/raw/trait_info.csv", "data/metadata.csv",
                     "utils/parameters.R", "utils/library.R", "utils/functions.R",
-                    "manuscript/Methods_Results.Rmd",
+                    "report/Methods_Results.Rmd",
                     "scripts/01_DATA_prepare_traits.R", "scripts/04_ANALYSIS_compare_spaces.R",
                     "scripts/06_ANALYSIS_groups.R") %in% f))
   for (r in f[grepl("\\.R$", f)]) expect_silent(parse(file.path(res$dir, r)))

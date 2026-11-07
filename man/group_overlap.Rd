@@ -140,7 +140,7 @@ data(birds_traits); data(birds_trait_info)
 tr <- drop_incomplete(prepare_traits(birds_traits, birds_trait_info, "species"))
 sp <- build_space(tr, dimensions = c("Diet", "Locomotion"))
 ord <- stats::setNames(birds_traits$order, birds_traits$species)
-g <- group_overlap(sp, ord, levels = c("Passeriformes", "Charadriiformes", "Accipitriformes"),
+g <- group_overlap(sp, ord, levels = c("Anseriformes", "Accipitriformes", "Strigiformes"),
                    hull_axes = 3, nperm = 99)
 g$pairs
 }

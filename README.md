@@ -131,7 +131,7 @@ birds_spaces/
 ├── utils/        library.R, parameters.R (every setting, in one place), functions.R
 ├── data/         raw/ (traits.csv, trait_info.csv, phylogeny.tre), processed/, metadata.csv
 ├── results/      figures/ (Fig*, FigS*: .png + .pdf), tables/ (Table*, TableS*: .csv)
-├── manuscript/   Methods_Results.Rmd (+ .docx): Methods and Results with references
+├── report/       Methods_Results.Rmd (+ .docx): Methods and Results with references
 ├── run_all.R, birds_spaces.Rproj, README.md, session_info.txt, .gitignore
 ```
 

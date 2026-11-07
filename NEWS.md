@@ -1,5 +1,10 @@
 # DisentFunSpaces 0.8.0
 
+## Analysis project
+
+* The folder of the exported analysis project holding `Methods_Results.Rmd`
+  (and its rendered `.docx`) is renamed `report/` (previously `manuscript/`).
+
 ## Repeated species and group centroids
 
 * A species may now appear in several rows of the trait table (individuals,

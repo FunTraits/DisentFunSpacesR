@@ -9,7 +9,7 @@ analysis_script(p)
 \arguments{
 \item{p}{Named list of settings (`data_file`, `trait_info_file`,
 `species_col`, `records` (`TRUE` when species are repeated: records
-  numbered with [record_ids()]), `iucn_col`, `sep` (optionally `dec`), `missing`, `phylo_file`,
+numbered with [record_ids()]), `iucn_col`, `sep` (optionally `dec`), `missing`, `phylo_file`,
 `n_phylo_axes`, `ntree`, `cov_cols`, `spaces`, `weighting`, `correction`,
 `method`, `nrepet`, `n_axes`, `mantel`, `k`; optionally `engine`,
 `eigen`, `keep_dist`, `cores` (large datasets), `group_col` (several

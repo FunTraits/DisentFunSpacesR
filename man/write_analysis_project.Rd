@@ -101,7 +101,7 @@ The project contains:
 |-- data/processed/  objects passed between scripts (.rds)
 |-- data/metadata.csv  definition of every variable
 |-- results/figures/, results/tables/
-|-- manuscript/   Methods_Results.Rmd (+ .docx once rendered)
+|-- report/       Methods_Results.Rmd (+ .docx once rendered)
 |-- run_all.R, <project>.Rproj, README.md, session_info.txt, .gitignore
 }
 }
