@@ -248,8 +248,11 @@ app_ui <- function() {
           shiny::actionButton("guess", "Guess trait types", class = "btn-outline-primary w-100"),
           shiny::fileInput("ti_file", "...or load a trait-information CSV", accept = ".csv"),
           shiny::hr(),
-          shiny::textInput("bulk_dim", "Assign dimension to selected rows", placeholder = "e.g. Diet"),
+          shiny::textInput("bulk_dim", "Assign dimension(s) to selected rows",
+                           placeholder = "e.g. Diet, or Diet; Locomotion"),
           shiny::selectizeInput("bulk_rows", "Rows (traits)", choices = NULL, multiple = TRUE),
+          shiny::radioButtons("bulk_mode", NULL, inline = TRUE,
+                              c("Replace" = "replace", "Add to current" = "add", "Remove" = "remove")),
           shiny::actionButton("bulk_apply", "Apply", class = "btn-sm btn-outline-secondary"),
           shiny::hr(),
           shiny::actionButton("validate", "Validate traits", class = "btn-primary w-100"),
@@ -260,7 +263,9 @@ app_ui <- function() {
           bslib::nav_panel("Trait description",
             sh$p(class = "step-help",
               "For each column: tick 'use', choose the type, and give the functional dimension",
-              " (e.g. Locomotion, Diet, Reproduction). Columns of a fuzzy-coded (F) or multichoice (B)",
+              " (e.g. Locomotion, Diet, Reproduction). A trait can belong to several dimensions:",
+              " separate them with ';' (e.g. Diet; Locomotion); it then enters the space of each",
+              " dimension, and only once a space combining them. Columns of a fuzzy-coded (F) or multichoice (B)",
               " trait must share the same 'block' name. 'levels' gives the order of an ordinal trait",
               " stored as text (a;b;c). Circular traits need the cycle limits (e.g. 0 and 24 for hours)."),
             sh$div(style = "max-height: 62vh; overflow-y: auto;", shiny::uiOutput("ti_editor"))),
@@ -851,7 +856,16 @@ app_server <- function(input, output, session) {
   shiny::observeEvent(input$bulk_apply, {
     shiny::req(input$bulk_rows, nzchar(input$bulk_dim))
     ti <- current_ti()
-    ti$dimension[ti$trait %in% input$bulk_rows] <- input$bulk_dim
+    sel <- ti$trait %in% input$bulk_rows
+    new <- .split_dims(input$bulk_dim)[[1]]
+    shiny::req(length(new) > 0)
+    cur <- .split_dims(ti$dimension[sel])
+    upd <- switch(if (is.null(input$bulk_mode)) "replace" else input$bulk_mode,
+      add = lapply(cur, function(d) union(setdiff(d, "Unassigned"), new)),
+      remove = lapply(cur, function(d) setdiff(d, new)),
+      lapply(cur, function(d) new))
+    ti$dimension[sel] <- vapply(upd, function(d) if (length(d)) paste(d, collapse = "; ") else "",
+                                character(1))
     rv$ti <- ti; rv$ti_version <- rv$ti_version + 1
   })
 
@@ -871,7 +885,7 @@ app_server <- function(input, output, session) {
     rv$ti <- ti
     rv$traits <- res$tr; rv$traits_final <- NULL; rv$spaces <- NULL; rv$cmp <- NULL; rv$metrics <- NULL
     rv$valid_msg <- res$w
-    dims <- unique(res$tr$trait_info$dimension)
+    dims <- trait_dimensions(res$tr)
     sp <- default_spaces(res$tr)
     shiny::updateCheckboxGroupInput(session, "spaces_sel", choices = names(sp), selected = names(sp))
     shiny::updateSelectizeInput(session, "custom_dims", choices = dims)
@@ -880,8 +894,11 @@ app_server <- function(input, output, session) {
       shiny::showNotification(sprintf(paste0("%d species: the spaces will be built with fast distances and a",
                                              " partial PCoA (tab 4, 'Performance')."),
                                       length(res$tr$species)), type = "message", duration = 10)
-    shiny::showNotification(sprintf("%d species, %d traits in %d dimension(s).",
-                                    length(res$tr$species), nrow(trait_summary(res$tr)), length(dims)),
+    n_shared <- sum(lengths(.split_dims(trait_summary(res$tr)$dimension)) > 1)
+    shiny::showNotification(sprintf("%d species, %d traits in %d dimension(s)%s.",
+                                    length(res$tr$species), nrow(trait_summary(res$tr)), length(dims),
+                                    if (n_shared) sprintf(" (%d trait%s shared by several dimensions)",
+                                                          n_shared, if (n_shared > 1) "s" else "") else ""),
                             type = "message")
     bslib::nav_select("nav", "3. Missing values")
   })
@@ -1596,7 +1613,7 @@ app_server <- function(input, output, session) {
       stat(if (is.null(d)) "\u2013" else format(if (is.null(tr)) nrow(d) else length(tr$species),
                                                 big.mark = ","), "species"),
       stat(if (is.null(tr)) "\u2013" else nrow(trait_summary(tr)), "traits used"),
-      stat(if (is.null(tr)) "\u2013" else length(unique(tr$trait_info$dimension)), "dimensions"),
+      stat(if (is.null(tr)) "\u2013" else length(trait_dimensions(tr)), "dimensions"),
       stat(if (is.null(rv$spaces)) "\u2013" else length(rv$spaces), "spaces built"))
   })
 

@@ -39,7 +39,7 @@ t3 <- tab("Table3_procrustes"); t4 <- tab("Table4_metric_congruence")
 t5 <- tab("Table5_groups_summary"); t7 <- tab("Table7_focal_summary");
 t8 <- tab("Table8_extinction_scenarios"); t9 <- tab("Table9_continuous_variable"); ie <- tab("TableS2_imputation_error")
 n_sp <- if (!is.null(s1)) s1$n_species_analysed[1] else NA
-dims <- unique(t1$dimension)
+dims <- unique(trimws(unlist(strsplit(as.character(t1$dimension), ";", fixed = TRUE))))
 types <- c(Q = "continuous", O = "ordinal", N = "nominal", B = "multichoice",
            F = "fuzzy-coded", C = "circular", D = "binary")
 type_tab <- table(t1$type)

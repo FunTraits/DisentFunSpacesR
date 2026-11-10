@@ -148,7 +148,7 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
   cran <- c("ggplot2", "ade4", "ape", "vegan",
             if (identical(p$missing, "impute")) "missForest",
             if (identical(p$eigen, "partial")) "RSpectra")
-  dims <- unique(ti$dimension)
+  dims <- trait_dimensions(ti)
   extra <- c(if (!is.null(p$iucn_col)) sprintf("`%s` (IUCN category, for FUSE)", p$iucn_col),
              if (!is.null(p$groups$col)) sprintf("%s (species groups, not a trait)",
                paste0("`", p$groups$col, "`", collapse = ", ")),
@@ -260,7 +260,7 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
 .project_params <- function(p, ti, data, has_phylo = FALSE) {
   `%||%` <- function(a, b) if (is.null(a) || (length(a) == 1 && is.na(a))) b else a
   nz <- function(x) if (is.null(x) || !length(x) || is.na(x[1]) || !nzchar(x[1])) NULL else x
-  dims <- unique(ti$dimension)
+  dims <- trait_dimensions(ti)
   default_sp <- stats::setNames(as.list(dims), dims)
   if (length(dims) > 1) default_sp$Combined <- dims
   n <- nrow(data)

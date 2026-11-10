@@ -23,7 +23,10 @@ a file.
 \details{
 Required columns: `trait` (column name in `data`), `type` (one of
 [trait_types()] codes) and `dimension` (functional dimension, e.g.
-"Locomotion"). Optional columns: `block` (traits of type `F` or `B` that
+"Locomotion"). A trait can belong to several dimensions, listed in
+`dimension` separated by `;` (e.g. `"Diet;Locomotion"`): it is then
+included in the space of each of these dimensions, and only once in a
+space combining them (see [build_space()]). Optional columns: `block` (traits of type `F` or `B` that
 share a `block` form a single multi-column trait; defaults to `trait`),
 `transform` (`none`, `log10`, `log1p`, `sqrt`, `logit`; continuous traits
 only), `weight` (relative weight of the trait in the distance, default 1),

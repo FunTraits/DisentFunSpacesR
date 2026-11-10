@@ -278,3 +278,24 @@ test_that("app accepts repeated species (records) and shows group centroids", {
     expect_match(analysis_script(p), "record_ids", fixed = TRUE)
   })
 })
+
+test_that("app bulk assignment adds, removes and replaces dimensions", {
+  shiny::testServer(DisentFunSpaces:::app_server, {
+    session$setInputs(src = "example", species_col = "species", iucn_col = "iucn", sep = ",")
+    lt <- rv$ti$trait[rv$ti$dimension == "Locomotion" & rv$ti$use][1]
+    session$setInputs(bulk_rows = lt, bulk_dim = "Diet", bulk_mode = "add", bulk_apply = 1)
+    expect_equal(rv$ti$dimension[rv$ti$trait == lt], "Locomotion; Diet")
+    session$setInputs(validate = 1)
+    expect_s3_class(rv$traits, "fs_traits")
+    expect_equal(rv$traits$trait_info$dimension[rv$traits$trait_info$trait == lt], "Locomotion;Diet")
+    session$setInputs(missing = "drop", run_missing = 1)
+    session$setInputs(spaces_sel = c("Diet", "Locomotion", "Combined"), weighting = "variable",
+                      correction = "none", run_spaces = 1)
+    expect_true(lt %in% rv$spaces$Diet$cor$trait)
+    expect_true(lt %in% rv$spaces$Locomotion$cor$trait)
+    session$setInputs(bulk_rows = lt, bulk_dim = "Diet", bulk_mode = "remove", bulk_apply = 2)
+    expect_equal(rv$ti$dimension[rv$ti$trait == lt], "Locomotion")
+    session$setInputs(bulk_rows = lt, bulk_dim = "Diet ; Reproduction", bulk_mode = "replace", bulk_apply = 3)
+    expect_equal(rv$ti$dimension[rv$ti$trait == lt], "Diet; Reproduction")
+  })
+})

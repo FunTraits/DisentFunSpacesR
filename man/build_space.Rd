@@ -94,6 +94,12 @@ analysis), the distance is that of a single `dist.ktab()` call on all
 tables. With `weighting = "dimension"` or unequal weights in
 `trait_info$weight`, the distance is computed with [trait_distance()]
 (also based on `dist.ktab()`) and passed to [PCoAGraph()].
+
+A trait assigned to several dimensions (`dimension = "Diet;Locomotion"`
+in the trait-information table) enters the space of each of its
+dimensions, and only once a space combining them. Spaces sharing traits
+are not independent: their congruence (Procrustes, [compare_spaces()]) is
+partly due to the shared traits.
 }
 \examples{
 data(birds_traits); data(birds_trait_info)

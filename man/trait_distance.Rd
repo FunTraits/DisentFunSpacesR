@@ -52,6 +52,13 @@ Two weighting schemes are available:
   so that each dimension contributes equally whatever its number of traits
   (cf. de Bello et al. 2021, <doi:10.1111/2041-210X.13537>).
 
+A trait assigned to several dimensions (`dimension = "Diet;Locomotion"`,
+see [check_trait_info()]) is one variable: with `"variable"` weighting it
+counts once in a space combining its dimensions; with `"dimension"` and
+`"dimension_scaled"` weighting it contributes to the within-dimension mean
+of each of its dimensions, and therefore weighs more than a trait
+belonging to a single dimension.
+
 Species pairs sharing no non-missing trait make the distance undefined;
 [build_space()] excludes species without any value for the selected
 dimensions before calling this function.

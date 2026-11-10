@@ -24,7 +24,7 @@ test_that("check_trait_info catches inconsistent tables", {
   ti <- birds_trait_info; ti$transform[ti$trait == "diet_inv"] <- "log10"
   expect_error(check_trait_info(ti), "only apply to continuous")
   ti <- birds_trait_info; ti$dimension[ti$trait == "diet_inv"] <- "Other"
-  expect_error(check_trait_info(ti), "several dimensions")
+  expect_error(check_trait_info(ti), "different dimensions")
   expect_error(check_trait_info(birds_trait_info, birds_traits[, 1:3]), "absent from data")
   expect_false(any(grepl("^beak_", check_trait_info(birds_trait_info)$trait)))   # use = FALSE
 })
@@ -116,4 +116,59 @@ test_that("repeated species are kept as records with their own identifiers", {
                             records = stats::setNames(sp, d$species))
   expect_setequal(colnames(cm$comm), c(d$species[sp == sp[1]], d$species[sp == sp[2]], sp[11]))
   expect_equal(sum(cm$comm["s1", ]), 3)
+})
+
+test_that("a trait can be assigned to several dimensions", {
+  tr0 <- ex()
+  ti0 <- tr0$trait_info
+  lt <- ti0$trait[ti0$dimension == "Locomotion" & ti0$type == "Q"][1]
+  ti <- birds_trait_info
+  ti$dimension[ti$trait == lt] <- " Locomotion ; Diet"
+  tr <- drop_incomplete(prepare_traits(birds_traits, ti, "species"))
+  expect_equal(tr$species, tr0$species)
+  expect_equal(tr$trait_info$dimension[tr$trait_info$trait == lt], "Locomotion;Diet")
+  expect_setequal(trait_dimensions(tr), trait_dimensions(tr0))
+  dt <- dimension_traits(tr)
+  expect_equal(sum(dt$trait == lt), 2)
+  expect_true(all(dt$shared[dt$trait == lt]))
+  expect_equal(sum(dt$shared), 2)
+  expect_setequal(names(default_spaces(tr)), names(default_spaces(tr0)))
+
+  sp <- build_spaces(tr, spaces = list(Diet = "Diet", Loco = "Locomotion",
+                                       Both = c("Diet", "Locomotion")), envfit_perm = 0)
+  expect_true(lt %in% sp$Diet$cor$trait)
+  expect_true(lt %in% sp$Loco$cor$trait)
+  expect_equal(sp$Diet$cor$dimension[sp$Diet$cor$trait == lt], "Diet")
+  expect_equal(sum(sp$Both$variables$variable == lt), 1)
+
+  # "variable" weighting: the shared trait counts once in the combined space
+  expect_equal(as.vector(trait_distance(tr, c("Diet", "Locomotion"))),
+               as.vector(trait_distance(tr0, c("Diet", "Locomotion"))))
+  # the Diet space = Diet traits + the shared trait
+  ti2 <- birds_trait_info; ti2$dimension[ti2$trait == lt] <- "Diet"
+  tr2 <- drop_incomplete(prepare_traits(birds_traits, ti2, "species"))
+  expect_equal(as.vector(trait_distance(tr, "Diet")), as.vector(trait_distance(tr2, "Diet")))
+  expect_equal(as.vector(trait_distance(tr, "Locomotion")), as.vector(trait_distance(tr0, "Locomotion")))
+  # "dimension" weighting: the shared trait enters the mean of each dimension
+  dD <- as.vector(trait_distance(tr, "Diet")); dL <- as.vector(trait_distance(tr, "Locomotion"))
+  expect_equal(as.vector(trait_distance(tr, c("Diet", "Locomotion"), weighting = "dimension")),
+               sqrt((dD^2 + dL^2) / 2))
+  for (w in c("dimension", "dimension_scaled"))
+    expect_equal(as.vector(trait_distance(tr, weighting = w)),
+                 as.vector(trait_distance(tr, weighting = w, engine = "fast")), tolerance = 1e-8)
+  # unequal weights (per-variable path)
+  ti3 <- ti; ti3$weight[ti3$trait == lt] <- 2
+  tr3 <- drop_incomplete(prepare_traits(birds_traits, ti3, "species"))
+  expect_equal(as.vector(trait_distance(tr3, weighting = "dimension")),
+               as.vector(trait_distance(tr3, weighting = "dimension", engine = "fast")), tolerance = 1e-8)
+})
+
+test_that("columns of a block must share the same set of dimensions", {
+  ti <- birds_trait_info
+  b <- ti$block == "diet"
+  ti$dimension[b] <- c("Diet;Foraging", rep("Foraging; Diet", sum(b) - 1))
+  ck <- check_trait_info(ti)
+  expect_true(all(ck$dimension[ck$block == "diet"] == "Diet;Foraging"))
+  ti$dimension[which(b)[1]] <- "Diet"
+  expect_error(check_trait_info(ti), "different dimensions")
 })

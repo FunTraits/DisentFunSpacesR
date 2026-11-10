@@ -15,6 +15,12 @@
 #' `trait_info$weight`, the distance is computed with [trait_distance()]
 #' (also based on `dist.ktab()`) and passed to [PCoAGraph()].
 #'
+#' A trait assigned to several dimensions (`dimension = "Diet;Locomotion"`
+#' in the trait-information table) enters the space of each of its
+#' dimensions, and only once a space combining them. Spaces sharing traits
+#' are not independent: their congruence (Procrustes, [compare_spaces()]) is
+#' partly due to the shared traits.
+#'
 #' @inheritParams trait_distance
 #' @param name Name of the space (default: dimensions pasted with "+").
 #' @param correction Correction for negative eigenvalues passed to
@@ -75,15 +81,19 @@ build_space <- function(x, dimensions = NULL, name = NULL,
   correction <- match.arg(correction)
   engine <- match.arg(engine)
   eigen <- match.arg(eigen)
-  if (is.null(dimensions)) dimensions <- unique(x$trait_info$dimension)
-  unk <- setdiff(dimensions, x$trait_info$dimension)
+  all_dims <- trait_dimensions(x)
+  if (is.null(dimensions)) dimensions <- all_dims
+  unk <- setdiff(dimensions, all_dims)
   if (length(unk)) stop("Unknown dimension(s): ", paste(unk, collapse = ", "),
-                        ". Available: ", paste(unique(x$trait_info$dimension), collapse = ", "))
+                        ". Available: ", paste(all_dims, collapse = ", "))
   if (is.null(name)) name <- paste(dimensions, collapse = "+")
   if (is.null(keep_dist)) keep_dist <- length(x$species) < 5000
 
   # species without any value for the traits of this space are excluded
-  ti <- x$trait_info[x$trait_info$dimension %in% dimensions, , drop = FALSE]
+  # (a trait assigned to several dimensions is kept once; its `dimension` is
+  # restricted to the dimensions of this space)
+  ti <- x$trait_info[.in_dims(x$trait_info$dimension, dimensions), , drop = FALSE]
+  ti$dimension <- .restrict_dims(ti$dimension, dimensions)
   empty <- rowSums(!is.na(x$data[, ti$trait, drop = FALSE])) == 0
   excluded <- x$species[empty]
   if (length(excluded)) {
@@ -202,7 +212,7 @@ build_spaces <- function(x, spaces = NULL, ..., progress = NULL) {
 #' @return Named list of dimension vectors.
 #' @export
 default_spaces <- function(x) {
-  dims <- unique(x$trait_info$dimension)
+  dims <- trait_dimensions(x)
   sp <- stats::setNames(as.list(dims), dims)
   if (length(dims) > 1) sp$Combined <- dims
   sp

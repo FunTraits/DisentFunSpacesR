@@ -18,6 +18,13 @@
 #'   so that each dimension contributes equally whatever its number of traits
 #'   (cf. de Bello et al. 2021, <doi:10.1111/2041-210X.13537>).
 #'
+#' A trait assigned to several dimensions (`dimension = "Diet;Locomotion"`,
+#' see [check_trait_info()]) is one variable: with `"variable"` weighting it
+#' counts once in a space combining its dimensions; with `"dimension"` and
+#' `"dimension_scaled"` weighting it contributes to the within-dimension mean
+#' of each of its dimensions, and therefore weighs more than a trait
+#' belonging to a single dimension.
+#'
 #' Species pairs sharing no non-missing trait make the distance undefined;
 #' [build_space()] excludes species without any value for the selected
 #' dimensions before calling this function.
@@ -82,9 +89,10 @@ trait_distance <- function(x, dimensions = NULL,
   if (option != "scaledBYrange") engine <- "ade4"
   ti <- x$trait_info
   if (!is.null(dimensions)) {
-    unk <- setdiff(dimensions, ti$dimension)
+    unk <- setdiff(dimensions, trait_dimensions(ti))
     if (length(unk)) stop("Unknown dimension(s): ", paste(unk, collapse = ", "))
-    ti <- ti[ti$dimension %in% dimensions, , drop = FALSE]
+    ti <- ti[.in_dims(ti$dimension, dimensions), , drop = FALSE]
+    ti$dimension <- .restrict_dims(ti$dimension, dimensions)
   }
   vars <- .build_variables(x$data, ti)
   if (length(vars$tables) == 0) stop("No usable trait in the selected dimension(s).")
@@ -96,12 +104,14 @@ trait_distance <- function(x, dimensions = NULL,
     bl <- .make_blocks(x$data, t)
     ade4::dist.ktab(ade4::ktab.list.df(bl$x), bl$groups, scann = FALSE, option = option)
   }
-  equal_within <- all(tapply(vt$weight, vt$dimension, function(w) length(unique(w)) == 1))
+  dims <- trait_dimensions(vt)
+  equal_within <- all(vapply(dims, function(dm)
+    length(unique(vt$weight[.in_dims(vt$dimension, dm)])) == 1, logical(1)))
   if (engine == "ade4" && weighting == "variable" && equal_w) {
     d <- suppressWarnings(ktab_dist(ti))
   } else if (engine == "ade4" && weighting != "variable" && equal_within) {
-    dims <- unique(vt$dimension)
-    per_dim <- lapply(dims, function(dm) as.vector(suppressWarnings(ktab_dist(ti[ti$dimension == dm, ]))))
+    per_dim <- lapply(dims, function(dm)
+      as.vector(suppressWarnings(ktab_dist(ti[.in_dims(ti$dimension, dm), , drop = FALSE]))))
     if (weighting == "dimension_scaled") per_dim <- lapply(per_dim, .unit_ms)
     d <- sqrt(.wmean_sq(per_dim, rep(1, length(dims))))
     attr(d, "Size") <- n; attr(d, "Diag") <- FALSE; attr(d, "Upper") <- FALSE
@@ -116,9 +126,8 @@ trait_distance <- function(x, dimensions = NULL,
     if (weighting == "variable") {
       d2 <- .wmean_sq_stream(seq_along(vars$tables), one, vt$weight)
     } else {
-      dims <- unique(vt$dimension)
       per_dim <- lapply(dims, function(dm) {
-        idx <- which(vt$dimension == dm)
+        idx <- which(.in_dims(vt$dimension, dm))
         sqrt(.wmean_sq_stream(idx, one, vt$weight))
       })
       if (weighting == "dimension_scaled") per_dim <- lapply(per_dim, .unit_ms)

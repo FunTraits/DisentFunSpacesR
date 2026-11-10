@@ -51,6 +51,66 @@ trait_types <- function() {
 
 .transforms <- c("none", "log10", "log1p", "sqrt", "logit")
 
+# A trait may belong to several functional dimensions: `trait_info$dimension`
+# then lists them separated by ";" (e.g. "Diet;Foraging"). Helpers:
+# .split_dims()    list of the dimensions of each trait (trimmed, unique)
+# .norm_dims()     canonical string ("Diet;Foraging"), NA if empty
+# .in_dims()       does each trait belong to at least one of `dims`?
+# .restrict_dims() dimensions of each trait restricted to `dims`
+.split_dims <- function(x) {
+  lapply(strsplit(as.character(x), ";", fixed = TRUE), function(d) {
+    d <- trimws(d)
+    unique(d[!is.na(d) & nzchar(d)])
+  })
+}
+.norm_dims <- function(x) {
+  vapply(.split_dims(x), function(d) if (length(d)) paste(d, collapse = ";") else NA_character_,
+         character(1))
+}
+.in_dims <- function(x, dims) vapply(.split_dims(x), function(d) any(d %in% dims), logical(1))
+.restrict_dims <- function(x, dims) {
+  vapply(.split_dims(x), function(d) paste(d[d %in% dims], collapse = ";"), character(1))
+}
+
+#' Functional dimensions of a set of traits
+#'
+#' A trait can be assigned to several functional dimensions: its `dimension`
+#' in the trait-information table then lists them separated by `;` (e.g.
+#' `"Diet;Foraging"` for bill shape). `trait_dimensions()` returns the
+#' individual dimensions, and `dimension_traits()` the traits of each
+#' dimension (a trait shared by several dimensions appears in each of them).
+#'
+#' @param x An `fs_traits` object ([prepare_traits()]) or a
+#'   trait-information data frame with a `dimension` column.
+#' @return `trait_dimensions()`: character vector of dimension names, in
+#'   order of first appearance. `dimension_traits()`: data frame with one
+#'   row per trait x dimension (`dimension`, `trait`, `block`, `type`,
+#'   `shared` = the trait also belongs to another dimension).
+#' @export
+#' @examples
+#' ti <- data.frame(trait = c("wing", "bill", "diet"), type = c("Q", "Q", "N"),
+#'                  dimension = c("Locomotion", "Diet; Locomotion", "Diet"))
+#' trait_dimensions(ti)
+#' dimension_traits(ti)
+trait_dimensions <- function(x) {
+  ti <- if (inherits(x, "fs_traits")) x$trait_info else as.data.frame(x)
+  if (is.null(ti$dimension)) return(character(0))
+  unique(unlist(.split_dims(ti$dimension)))
+}
+
+#' @rdname trait_dimensions
+#' @export
+dimension_traits <- function(x) {
+  ti <- if (inherits(x, "fs_traits")) x$trait_info else as.data.frame(x, stringsAsFactors = FALSE)
+  if (is.null(ti$block)) ti$block <- ti$trait
+  d <- .split_dims(ti$dimension)
+  n <- lengths(d)
+  i <- rep(seq_len(nrow(ti)), n)
+  data.frame(dimension = unlist(d), trait = as.character(ti$trait[i]),
+             block = as.character(ti$block[i]), type = as.character(ti$type[i]),
+             shared = n[i] > 1, stringsAsFactors = FALSE, row.names = NULL)
+}
+
 #' Guess a trait-information table from a trait data frame
 #'
 #' Produces a first draft of the trait-information table that drives the
@@ -175,7 +235,10 @@ guess_trait_info <- function(data, species_col = NULL, max_ordinal_levels = 5,
 #'
 #' Required columns: `trait` (column name in `data`), `type` (one of
 #' [trait_types()] codes) and `dimension` (functional dimension, e.g.
-#' "Locomotion"). Optional columns: `block` (traits of type `F` or `B` that
+#' "Locomotion"). A trait can belong to several dimensions, listed in
+#' `dimension` separated by `;` (e.g. `"Diet;Locomotion"`): it is then
+#' included in the space of each of these dimensions, and only once in a
+#' space combining them (see [build_space()]). Optional columns: `block` (traits of type `F` or `B` that
 #' share a `block` form a single multi-column trait; defaults to `trait`),
 #' `transform` (`none`, `log10`, `log1p`, `sqrt`, `logit`; continuous traits
 #' only), `weight` (relative weight of the trait in the distance, default 1),
@@ -195,8 +258,8 @@ check_trait_info <- function(trait_info, data = NULL) {
   ti$trait <- as.character(ti$trait)
   ti$type <- toupper(trimws(as.character(ti$type)))
   if (is.null(ti$dimension)) ti$dimension <- "All traits"
-  ti$dimension <- as.character(ti$dimension)
-  ti$dimension[is.na(ti$dimension) | ti$dimension == ""] <- "Unassigned"
+  ti$dimension <- .norm_dims(ti$dimension)
+  ti$dimension[is.na(ti$dimension)] <- "Unassigned"
   if (is.null(ti$block)) ti$block <- ti$trait
   ti$block <- as.character(ti$block)
   ti$block[is.na(ti$block) | ti$block == ""] <- ti$trait[is.na(ti$block) | ti$block == ""]
@@ -243,8 +306,12 @@ check_trait_info <- function(trait_info, data = NULL) {
     rows <- ti$block == b
     if (length(unique(ti$type[rows])) > 1)
       stop("Block '", b, "' mixes several trait types.")
-    if (length(unique(ti$dimension[rows])) > 1)
-      stop("Block '", b, "' is assigned to several dimensions.")
+    dset <- vapply(.split_dims(ti$dimension[rows]), function(d) paste(sort(d), collapse = ";"),
+                   character(1))
+    if (length(unique(dset)) > 1)
+      stop("Columns of block '", b, "' are assigned to different dimensions; ",
+           "give all of them the same dimension(s).")
+    ti$dimension[rows] <- ti$dimension[rows][1]
     if (length(unique(ti$weight[rows])) > 1)
       stop("Block '", b, "' has several weights; give one weight per block.")
     if (sum(rows) < 2)

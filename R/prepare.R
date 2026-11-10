@@ -242,7 +242,7 @@ trait_summary <- function(x) {
 drop_incomplete <- function(x, dimensions = NULL) {
   stopifnot(inherits(x, "fs_traits"))
   ti <- x$trait_info
-  if (!is.null(dimensions)) ti <- ti[ti$dimension %in% dimensions, ]
+  if (!is.null(dimensions)) ti <- ti[.in_dims(ti$dimension, dimensions), , drop = FALSE]
   keep <- stats::complete.cases(x$data[, ti$trait, drop = FALSE])
   subset_species(x, x$species[keep])
 }

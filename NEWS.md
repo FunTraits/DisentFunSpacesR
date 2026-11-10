@@ -1,5 +1,23 @@
 # DisentFunSpaces 0.8.0
 
+## Traits shared by several functional dimensions
+
+* A trait can now be assigned to several functional dimensions: its
+  `dimension` in the trait-information table lists them separated by `;`
+  (e.g. `"Diet;Locomotion"`). The trait enters the space of each of its
+  dimensions and only once a space combining them (`weighting =
+  "variable"`); with `weighting = "dimension"` / `"dimension_scaled"` it
+  contributes to the within-dimension mean of each of its dimensions. The
+  columns of a fuzzy-coded or multichoice block must share the same set of
+  dimensions.
+* New `trait_dimensions()` (individual dimensions of a set of traits) and
+  `dimension_traits()` (one row per trait x dimension, with a `shared`
+  flag).
+* In the application (tab 2), dimensions are separated by `;` in the
+  'dimension' field; the bulk assignment can replace, add or remove
+  dimensions for the selected traits, and the validation reports the number
+  of traits shared by several dimensions.
+
 ## Analysis project
 
 * The folder of the exported analysis project holding `Methods_Results.Rmd`
