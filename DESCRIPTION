@@ -1,7 +1,7 @@
 Package: DisentFunSpaces
 Type: Package
 Title: Build and Compare Functional Spaces from Mixed-Type Trait Data
-Version: 0.8.0
+Version: 0.8.1
 Authors@R: c(
     person("Aurèle", "Toussaint", email = "aurele.toussaint@cnrs.fr",
            role = c("aut", "cre")),
@@ -9,28 +9,29 @@ Authors@R: c(
     person("Gaël", "Grenouillet", role = "ctb"),
     person("Liis", "Kasari-Toussaint", role = "ctb"),
     person("Sébastien", "Brosse", role = "ctb"))
-Description: Generalises the framework of Toussaint et al. (2026, Ecography,
-    <doi:10.1002/ecog.08578>) to any trait dataset. Traits are described by a
+Description: Generalises the framework of Toussaint et al. (2026)
+    <doi:10.1002/ecog.08578> to any trait dataset. Traits are described by a
     type (continuous, ordinal, nominal, binary, multichoice, fuzzy-coded,
     circular) and assigned to functional dimensions (e.g. locomotion, diet,
     reproduction). A functional space is built for each dimension and for any
     combination of dimensions from a generalised Gower distance (Pavoine et
-    al. 2009, <doi:10.1111/j.1600-0706.2008.16668.x>) followed by a Principal
+    al. (2009) <doi:10.1111/j.1600-0706.2008.16668.x>) followed by a Principal
     Coordinates Analysis. Spaces are compared with Procrustes tests, and
     species-level functional uniqueness (FUn), specialisation (FSp) and FUSE
     are computed in each space. Groups of species defined by any categorical
     attribute that is not a trait (origin, human uses, migration, threat
     status...) are compared in each space (convex hull overlap and functional
-    beta diversity, Villeger et al. 2013, <doi:10.1111/geb.12021>; PERMANOVA),
+    beta diversity, Villeger et al. (2013) <doi:10.1111/geb.12021>; PERMANOVA),
     and the species of focal groups are positioned relative to a reference
     group (e.g. non-native relative to native species: functional novelty,
-    loss of uniqueness, change in functional richness with null models). A 'shiny' application exposes the full
-    workflow, and the whole analysis can be exported as a reproducible project
-    (data, numbered scripts, parameters, results and a Methods and Results report). Example data: observed traits of 2000 bird species, described by the traits of
-    Toussaint et al. (2026), from AVONET
-    (Tobias et al. 2022, <doi:10.1111/ele.13898>), EltonTraits (Wilman et
-    al. 2014, <doi:10.1890/13-1917.1>) and the Amniote life-history database
-    (Myhrvold et al. 2015, <doi:10.1890/15-0846R.1>).
+    loss of uniqueness, change in functional richness with null models). A
+    'shiny' application exposes the full workflow, and the whole analysis can
+    be exported as a reproducible project (data, numbered scripts, parameters,
+    results and a Methods and Results report). Example data: observed traits
+    of 2000 bird species, described by the traits of Toussaint et al. (2026),
+    from AVONET (Tobias et al. (2022) <doi:10.1111/ele.13898>), EltonTraits
+    (Wilman et al. (2014) <doi:10.1890/13-1917.1>) and the Amniote
+    life-history database (Myhrvold et al. (2015) <doi:10.1890/15-0846R.1>).
 License: GPL (>= 3)
 Copyright: See inst/COPYRIGHTS for the fonts (IBM Plex, SIL Open Font
     License 1.1) and the sources of the example data.
@@ -38,8 +39,8 @@ Encoding: UTF-8
 Language: en-GB
 Depends: R (>= 4.1)
 Imports: ade4, ape, vegan, FNN, geometry, MASS, grDevices, ggplot2, shiny, bslib (>= 0.9.0),
-        DT, htmltools, parallel, stats, utils
-Suggests: missForest, knitr, patchwork, plotly, rmarkdown, readxl, RSpectra, callr, zip,
+        DT, htmltools, parallel, stats, utils, zip
+Suggests: missForest, knitr, patchwork, plotly, rmarkdown, readxl, RSpectra, callr,
         data.table, testthat (>= 3.0.0)
 Config/testthat/edition: 3
 LazyData: true

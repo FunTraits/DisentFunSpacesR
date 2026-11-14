@@ -40,7 +40,7 @@ impute_traits <- function(x, phylo = NULL, covariates = NULL, n_phylo_axes = 10,
                           seed = 20251029, ...) {
   stopifnot(inherits(x, "fs_traits"))
   if (!requireNamespace("missForest", quietly = TRUE)) {
-    stop("Package 'missForest' is required: install.packages('missForest')")
+    stop("Package 'missForest' is required; please install it from CRAN.")
   }
   ti <- x$trait_info
   dat <- x$data

@@ -5,3 +5,7 @@
 ^LICENSE\.md$
 ^cran-comments\.md$
 ^CRAN-SUBMISSION$
+^\.Rhistory$
+^\.DS_Store$
+^\.git$
+^\.gitignore$

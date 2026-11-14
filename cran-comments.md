@@ -1,6 +1,22 @@
-## Submission
+## Resubmission
 
-This is a new submission.
+This is a resubmission. In this version I have:
+
+* Written the references in the Description field as
+  `authors (year) <doi:...>`, with years in parentheses.
+* Added a complete \value section to compare_nonnative.Rd (class, structure
+  and meaning of the output).
+* Removed every change of the working directory: R/project.R runs the
+  generated project in a separate R process with `source(chdir = TRUE)` and
+  writes the archive with `zip::zip(root = )`; the template
+  inst/templates/analysis_project/run_all.R no longer calls setwd().
+* Removed all package installation from the package code and from the
+  project templates (no install.packages(), remotes::install_github() or
+  renv::restore() calls; missing packages are only reported).
+* Removed installed.packages() (replaced by requireNamespace()).
+* Limited the number of cores to 2 when _R_CHECK_LIMIT_CORES_ is set
+  (parallel Procrustes permutations, default number of cores of the shiny
+  application and data.table::fread() threads).
 
 DisentFunSpaces generalises the framework of Toussaint et al. (2026,
 Ecography, doi:10.1002/ecog.08578) to any mixed-type trait dataset: one

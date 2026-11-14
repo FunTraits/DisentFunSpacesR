@@ -38,7 +38,7 @@ run_app <- function(launch.browser = TRUE, max_upload_mb = 1000, ...) {
   if (.Platform$OS.type != "unix") return(1L)
   n <- tryCatch(parallel::detectCores(logical = FALSE), error = function(e) NA)
   if (is.na(n)) n <- 1L
-  as.integer(max(1L, min(8L, n - 1L)))
+  .limit_cores(min(8L, n - 1L))
 }
 # reference (unoptimised) BLAS in use? PCoA and Procrustes tests are then
 # several times slower than with an optimised BLAS (Accelerate, OpenBLAS, MKL)
@@ -86,7 +86,8 @@ run_app <- function(launch.browser = TRUE, max_upload_mb = 1000, ...) {
       d <- data.table::fread(path, sep = sep, dec = dec, header = TRUE,
                              na.strings = c("NA", ""), check.names = FALSE,
                              data.table = FALSE, showProgress = FALSE,
-                             integer64 = "double", quote = "\"", encoding = "UTF-8")
+                             integer64 = "double", quote = "\"", encoding = "UTF-8",
+                             nThread = .limit_cores(data.table::getDTthreads()))
     } else {
       d <- utils::read.table(path, header = TRUE, sep = sep, dec = dec, quote = "\"",
                              stringsAsFactors = FALSE, check.names = FALSE,
@@ -753,7 +754,7 @@ app_server <- function(input, output, session) {
               n, n, gb, max(2, ceiling(4 * gb))),
       if (!requireNamespace("RSpectra", quietly = TRUE)) shiny::tags$span(
         shiny::tags$b(" Install the package 'RSpectra'"),
-        " (install.packages('RSpectra')): without it the full eigendecomposition is used,",
+        " (from CRAN): without it the full eigendecomposition is used,",
         " which takes about ten minutes per space for 8,000 species."),
       if (.reference_blas()) shiny::tags$span(
         " R uses its reference BLAS: an optimised BLAS (Accelerate on macOS, OpenBLAS on",

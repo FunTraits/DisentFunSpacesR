@@ -206,15 +206,21 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
     log <- file.path(out$dir, "results", "run_all.log")
     say("Running the project's scripts (run_all.R)...")
     rs <- file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript")
-    old <- Sys.getenv("R_LIBS", unset = NA)
-    Sys.setenv(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep))
-    on.exit(if (is.na(old)) Sys.unsetenv("R_LIBS") else Sys.setenv(R_LIBS = old), add = TRUE)
-    owd <- setwd(out$dir)
-    on.exit(setwd(owd), add = TRUE)
-    status <- tryCatch(suppressWarnings(system2(rs, c("--no-save", "--no-restore", "run_all.R"),
+    # the project is run in a separate R process; the working directory of
+    # the current session is never changed: source(chdir = TRUE) runs
+    # run_all.R from the project folder within the child process only
+    old_libs <- Sys.getenv("R_LIBS", unset = NA)
+    old_run <- Sys.getenv("DFS_RUN_ALL", unset = NA)
+    on.exit({
+      if (is.na(old_libs)) Sys.unsetenv("R_LIBS") else Sys.setenv(R_LIBS = old_libs)
+      if (is.na(old_run)) Sys.unsetenv("DFS_RUN_ALL") else Sys.setenv(DFS_RUN_ALL = old_run)
+    }, add = TRUE)
+    Sys.setenv(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
+               DFS_RUN_ALL = file.path(out$dir, "run_all.R"))
+    expr <- shQuote("source(Sys.getenv('DFS_RUN_ALL'), chdir = TRUE)")
+    status <- tryCatch(suppressWarnings(system2(rs, c("--no-save", "--no-restore", "-e", expr),
                                                 stdout = log, stderr = log)),
                        error = function(e) { cat(conditionMessage(e), file = log, append = TRUE); 1L })
-    setwd(owd)
     out$log <- log
     lines <- tryCatch(readLines(log, warn = FALSE), error = function(e) character(0))
     out$ok <- identical(as.integer(status), 0L) && any(grepl("run successfully", lines))
@@ -228,12 +234,10 @@ write_analysis_project <- function(data, trait_info, dir, params = list(),
   if (zip) {
     zf <- paste0(out$dir, ".zip")
     if (file.exists(zf)) unlink(zf)
-    owd2 <- setwd(dirname(out$dir))
-    on.exit(setwd(owd2), add = TRUE)
-    files <- list.files(project, recursive = TRUE, all.files = TRUE, full.names = TRUE)
-    if (requireNamespace("zip", quietly = TRUE)) zip::zip(zf, files) else
-      utils::zip(zf, files, flags = "-r9Xq")
-    setwd(owd2)
+    # paths in the archive are relative to the parent folder of the project
+    # ('root'), without changing the working directory
+    files <- list.files(out$dir, recursive = TRUE, all.files = TRUE)
+    zip::zip(zf, files = file.path(basename(out$dir), files), root = dirname(out$dir))
     out$zip <- zf
     say("Project archive: ", zf)
   }

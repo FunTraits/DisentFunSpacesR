@@ -17,7 +17,7 @@ R package [DisentFunSpaces](https://github.com/FunTraits/DisentFunSpacesR)
 ├── scripts/                  # Analysis pipeline (sourced in numeric order by run_all.R)
 │   ├── 00_START_GeneralScript.R          # Packages, parameters and helpers (sourced by every script)
 {{SCRIPT_TREE}}
-│   └── setup_environment.R               # Installs the packages (not run by run_all.R)
+│   └── setup_environment.R               # Lists the missing packages (not run by run_all.R)
 │
 ├── utils/                    # Shared code
 │   ├── library.R                         # Packages
@@ -69,8 +69,9 @@ trait), `transform`, `weight`, `levels` (ordinal traits stored as text),
 ## 🧪 Reproducing the analysis
 
 1.  Open `{{PROJECT}}.Rproj` in RStudio.
-2.  Install the packages once: `source("scripts/setup_environment.R")`
-    (or let `utils/library.R` install what is missing).
+2.  Check which packages are missing with
+    `source("scripts/setup_environment.R")` and install them from CRAN
+    (`utils/library.R` stops with the list of missing packages).
 3.  Run the full pipeline:
 
     ``` r

@@ -1,18 +1,16 @@
 # ============================================================================
 # Packages used by the pipeline
 # ============================================================================
-# CRAN packages that are missing are installed; DisentFunSpaces itself is
-# installed from GitHub when missing. Versions that produced the results:
-# session_info.txt.
+# Nothing is installed here: missing packages stop the pipeline with the list
+# of what to install (see scripts/setup_environment.R). Versions that
+# produced the results: session_info.txt.
 
-cran <- c({{CRAN_PACKAGES}})
+cran <- c({{CRAN_PACKAGES}}, "DisentFunSpaces")
 missing_pkgs <- cran[!vapply(cran, requireNamespace, logical(1), quietly = TRUE)]
-if (length(missing_pkgs)) install.packages(missing_pkgs)
-
-if (!requireNamespace("DisentFunSpaces", quietly = TRUE)) {
-  if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
-  remotes::install_github("FunTraits/DisentFunSpacesR")
-}
+if (length(missing_pkgs))
+  stop("Missing packages: ", paste(missing_pkgs, collapse = ", "), ". ",
+       "Install them from CRAN (see scripts/setup_environment.R), then run again.",
+       call. = FALSE)
 
 suppressPackageStartupMessages({
   library(DisentFunSpaces)

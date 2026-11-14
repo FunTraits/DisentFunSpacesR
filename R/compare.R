@@ -107,7 +107,7 @@ compare_spaces <- function(spaces, n_axes = NULL, method = c("ade4", "vegan"),
   obs <- stat(Y)
   if (nrepet == 0) return(list(obs = obs, pvalue = NA_real_))
   n <- nrow(X)
-  cores <- max(1L, as.integer(cores))
+  cores <- .limit_cores(cores)
   # forking only pays off when each SVD is costly (many axes)
   big <- min(ncol(X), ncol(Y)) >= getOption("DisentFunSpaces.parallel_min_axes", 50)
   if (cores > 1L && big && .Platform$OS.type == "unix") {
@@ -120,6 +120,16 @@ compare_spaces <- function(spaces, n_axes = NULL, method = c("ade4", "vegan"),
     sim <- vapply(seq_len(nrepet), function(i) stat(Y[sample(n), , drop = FALSE]), numeric(1))
   }
   ade4::as.randtest(obs = obs, sim = sim)
+}
+
+# Number of cores actually used: at most 2 when R CMD check limits the
+# number of cores (_R_CHECK_LIMIT_CORES_, set on CRAN), so that examples,
+# tests and vignettes never use more than 2 cores.
+.limit_cores <- function(cores) {
+  cores <- max(1L, as.integer(cores), na.rm = TRUE)
+  lim <- tolower(Sys.getenv("_R_CHECK_LIMIT_CORES_", ""))
+  if (nzchar(lim) && lim != "false") cores <- min(cores, 2L)
+  cores
 }
 
 .align <- function(a, b, n_axes = NULL) {

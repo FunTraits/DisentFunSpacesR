@@ -40,7 +40,7 @@ utils::globalVariables(c("a1", "a2", "position", "FUSI", "species", "space", "va
 ## Internal: convex hull volume (NA when not computable)
 .hull_vol <- function(X) {
   if (!requireNamespace("geometry", quietly = TRUE))
-    stop("Package 'geometry' is needed for convex hulls: install.packages('geometry').")
+    stop("Package 'geometry' is needed for convex hulls; please install it from CRAN.")
   X <- unique(round(X, 10))
   if (nrow(X) <= ncol(X)) return(NA_real_)
   tryCatch(geometry::convhulln(X, options = "FA")$vol, error = function(e) NA_real_)
@@ -544,9 +544,23 @@ summary_nonnative <- function(x) {
 #' @param x Output of [nonnative_all()].
 #' @param metric Metric to compare.
 #' @param top Proportion of species defining the top set.
-#' @return A list, as [compare_metrics()]: `pairs` (data frame: `space1`,
-#'   `space2`, `spearman`, `jaccard_top`, `n_shared_top`), `top_sets`
-#'   (species of the top set of each space), `top_info`, `metric` and `top`.
+#' @return A list (the output of [compare_metrics()]) describing how far the
+#'   functional spaces agree on which species are extreme for `metric`:
+#'   * `pairs`: data frame with one row per pair of spaces (`space1`,
+#'     `space2`), the Spearman rank correlation of the metric between the two
+#'     spaces (`spearman`, from -1 to 1; close to 1 when both spaces rank the
+#'     species in the same order), the Jaccard index between their top sets
+#'     (`jaccard_top`, from 0 = no shared species to 1 = identical top sets)
+#'     and the number of species shared by the two top sets (`n_shared_top`);
+#'   * `top_sets`: named list (one element per space) of character vectors
+#'     giving the species of the top set, i.e. the `top` proportion of
+#'     species with the highest values (for `"dFUn_rel"`, the natives losing
+#'     most uniqueness); species tied with the cutoff value are all included;
+#'   * `top_info`: data frame with, for each space, the number of species
+#'     (`n_species`), the size of the top set (`n_top`, `prop_top`) and
+#'     `informative` (`FALSE` when ties make the top set larger than twice
+#'     the requested proportion);
+#'   * `metric` and `top`: the metric compared and the proportion used.
 #' @export
 compare_nonnative <- function(x, metric = "FNov", top = 0.1) {
   if (metric == "dFUn_rel") {

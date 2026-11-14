@@ -14,9 +14,25 @@ compare_nonnative(x, metric = "FNov", top = 0.1)
 \item{top}{Proportion of species defining the top set.}
 }
 \value{
-A list, as [compare_metrics()]: `pairs` (data frame: `space1`,
-  `space2`, `spearman`, `jaccard_top`, `n_shared_top`), `top_sets`
-  (species of the top set of each space), `top_info`, `metric` and `top`.
+A list (the output of [compare_metrics()]) describing how far the
+functional spaces agree on which species are extreme for `metric`:
+\itemize{
+\item `pairs`: data frame with one row per pair of spaces (`space1`,
+`space2`), the Spearman rank correlation of the metric between the two
+spaces (`spearman`, from -1 to 1; close to 1 when both spaces rank the
+species in the same order), the Jaccard index between their top sets
+(`jaccard_top`, from 0 = no shared species to 1 = identical top sets)
+and the number of species shared by the two top sets (`n_shared_top`);
+\item `top_sets`: named list (one element per space) of character vectors
+giving the species of the top set, i.e. the `top` proportion of
+species with the highest values (for `"dFUn_rel"`, the natives losing
+most uniqueness); species tied with the cutoff value are all included;
+\item `top_info`: data frame with, for each space, the number of species
+(`n_species`), the size of the top set (`n_top`, `prop_top`) and
+`informative` (`FALSE` when ties make the top set larger than twice
+the requested proportion);
+\item `metric` and `top`: the metric compared and the proportion used.
+}
 }
 \description{
 Wrapper around [compare_metrics()] for non-native species metrics

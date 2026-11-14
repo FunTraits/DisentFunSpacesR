@@ -1,3 +1,21 @@
+# DisentFunSpaces 0.8.1
+
+## Changes requested by CRAN
+
+* DESCRIPTION: references written as `authors (year) <doi:...>`.
+* `compare_nonnative()`: the returned value (structure and meaning) is
+  documented in full.
+* `write_analysis_project()` no longer changes the working directory: the
+  generated project is run in a separate R process with
+  `source(chdir = TRUE)`, and the archive is written with `zip::zip(root = )`
+  ('zip' moved from Suggests to Imports).
+* Generated projects install nothing: `utils/library.R` stops with the list of
+  missing packages, `scripts/setup_environment.R` only lists them, and
+  `run_all.R` neither changes the working directory nor calls
+  `renv::restore()`.
+* At most 2 cores are used when `_R_CHECK_LIMIT_CORES_` is set (Procrustes
+  permutations, default of the application, `data.table::fread()`).
+
 # DisentFunSpaces 0.8.0
 
 ## Traits shared by several functional dimensions
