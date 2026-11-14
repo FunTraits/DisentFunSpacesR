@@ -26,15 +26,11 @@ species, and a 'shiny' application.
 
 ## Test environments
 
-* local: Ubuntu 24.04, R 4.3.3 (R CMD check --as-cran): 0 errors, 0 warnings
-  (once LaTeX and missForest are available)
-<!-- TODO before submitting: run, then fill in the results -->
-* local: macOS (aarch64), R-release: devtools::check(args = "--as-cran")
-* win-builder, R-release: R 4.6.1 (2026-06-24 ucrt), Windows Server 2022 x64:
-  Status: 1 NOTE (new submission; possibly misspelled words are proper names)
-* win-builder, R-devel: R Under development (unstable) (2026-10-28 r90783 ucrt),
-  Windows Server 2022 x64: Status: 1 NOTE (new submission; possibly misspelled words)
-* macOS builder: devtools::check_mac_release()
+* local: macOS (aarch64), R 4.5.2, devtools::check(args = "--as-cran"):
+  0 errors | 0 warnings | 0 notes
+* R-hub v2 (GitHub Actions): windows (R-devel), macos-arm64 (R-devel),
+  linux (R-devel): 0 errors | 0 warnings
+* GitHub Actions R-CMD-check: macOS, Windows and Ubuntu (R-release): OK
 
 ## R CMD check results
 
